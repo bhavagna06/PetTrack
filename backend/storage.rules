@@ -1,0 +1,30 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // User profile images
+    match /users/{userId}/profile/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Pet images
+    match /pets/{petId}/images/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        exists(/databases/$(firestore.default)/documents/pets/$(petId)) &&
+        get(/databases/$(firestore.default)/documents/pets/$(petId)).data.ownerId == request.auth.uid;
+    }
+    
+    // Report images (lost/found)
+    match /reports/{reportId}/images/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        exists(/databases/$(firestore.default)/documents/reports/$(reportId)) &&
+        get(/databases/$(firestore.default)/documents/reports/$(reportId)).data.userId == request.auth.uid;
+    }
+    
+    // General validation
+    match /{allPaths=**} {
+      allow read, write: if false; // Deny all other access
+    }
+  }
+} 

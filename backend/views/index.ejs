@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            text-align: center;
+            max-width: 600px;
+            width: 90%;
+        }
+
+        .logo {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+        }
+
+        .message {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .api-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .api-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .endpoint {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        .method {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .get { background: #d4edda; color: #155724; }
+        .post { background: #d1ecf1; color: #0c5460; }
+        .put { background: #fff3cd; color: #856404; }
+        .delete { background: #f8d7da; color: #721c24; }
+
+        .status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+
+        .status.online {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.offline {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .links {
+            margin-top: 30px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            margin: 5px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+        }
+
+        .btn.secondary {
+            background: #6c757d;
+        }
+
+        .btn.secondary:hover {
+            background: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🐾 PetTrack</div>
+        <div class="subtitle">Backend API Server</div>
+        
+        <div class="message">
+            <strong><%= message %></strong>
+        </div>
+
+        <div class="status online">
+            ✅ Server is running
+        </div>
+
+        <div class="api-section">
+            <h3>📡 Available API Endpoints</h3>
+            
+            <div class="endpoint">
+                <span class="method get">GET</span>
+                <code>/api/pets</code> - Get all pets
+            </div>
+            
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <code>/api/pets</code> - Create new pet profile
+            </div>
+            
+            <div class="endpoint">
+                <span class="method get">GET</span>
+                <code>/api/pets/:id</code> - Get specific pet
+            </div>
+            
+            <div class="endpoint">
+                <span class="method put">PUT</span>
+                <code>/api/pets/:id</code> - Update pet profile
+            </div>
+            
+            <div class="endpoint">
+                <span class="method delete">DELETE</span>
+                <code>/api/pets/:id</code> - Delete pet profile
+            </div>
+            
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <code>/api/users/register</code> - Register new user
+            </div>
+            
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <code>/api/users/login</code> - User login
+            </div>
+        </div>
+
+        <div class="links">
+            <a href="/health" class="btn">🔍 Health Check</a>
+            <a href="/api/pets" class="btn secondary">📋 View Pets</a>
+            <a href="/api/users" class="btn secondary">👥 View Users</a>
+        </div>
+
+        <div style="margin-top: 30px; color: #666; font-size: 0.9rem;">
+            <p>🚀 Server running on port <%= process.env.PORT || 3000 %></p>
+            <p>📊 MongoDB connected successfully</p>
+            <p>🕒 Last updated: <%= new Date().toLocaleString() %></p>
+        </div>
+    </div>
+
+    <script>
+        // Auto-refresh status every 30 seconds
+        setInterval(() => {
+            fetch('/health')
+                .then(response => response.json())
+                .then(data => {
+                    const statusElement = document.querySelector('.status');
+                    if (data.status === 'OK') {
+                        statusElement.className = 'status online';
+                        statusElement.textContent = '✅ Server is running';
+                    } else {
+                        statusElement.className = 'status offline';
+                        statusElement.textContent = '❌ Server error';
+                    }
+                })
+                .catch(() => {
+                    const statusElement = document.querySelector('.status');
+                    statusElement.className = 'status offline';
+                    statusElement.textContent = '❌ Server offline';
+                });
+        }, 30000);
+    </script>
+</body>
+</html> 

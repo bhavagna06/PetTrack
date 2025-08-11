@@ -67,6 +67,16 @@ const petSchema = new mongoose.Schema({
     required: [true, 'Owner ID is required']
   },
   
+  // Pet Registration Type
+  registrationType: {
+    type: String,
+    enum: {
+      values: ['registered', 'reported'],
+      message: 'Registration type must be either "registered" or "reported"'
+    },
+    default: 'registered'
+  },
+  
   // Metadata
   isActive: {
     type: Boolean,
@@ -116,19 +126,33 @@ petSchema.pre('save', function(next) {
   next();
 });
 
-// Static method to get pets by owner
+// Static method to get pets by owner (only registered pets)
 petSchema.statics.findByOwner = function(ownerId) {
-  return this.find({ ownerId, isActive: true }).sort({ createdAt: -1 });
+  return this.find({ ownerId, isActive: true, registrationType: 'registered' }).sort({ createdAt: -1 });
 };
 
-// Static method to get lost pets
+// Static method to get lost pets (both reported pets and registered pets marked as lost)
 petSchema.statics.findLostPets = function() {
-  return this.find({ isLost: true, isActive: true }).sort({ createdAt: -1 });
+  return this.find({ 
+    isLost: true, 
+    isActive: true,
+    $or: [
+      { registrationType: 'reported' },
+      { registrationType: 'registered' }
+    ]
+  }).sort({ createdAt: -1 });
 };
 
-// Static method to get found pets
+// Static method to get found pets (both reported pets and registered pets marked as found)
 petSchema.statics.findFoundPets = function() {
-  return this.find({ isFound: true, isActive: true }).sort({ createdAt: -1 });
+  return this.find({ 
+    isFound: true, 
+    isActive: true,
+    $or: [
+      { registrationType: 'reported' },
+      { registrationType: 'registered' }
+    ]
+  }).sort({ createdAt: -1 });
 };
 
 // Instance method to mark pet as lost

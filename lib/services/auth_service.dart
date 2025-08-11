@@ -81,7 +81,13 @@ class AuthService {
       if (googleUser == null) {
         return null;
       }
-      return await _getCredentialFromGoogleAccount(googleUser);
+
+      final userCredential = await _getCredentialFromGoogleAccount(googleUser);
+
+      // After successful Firebase authentication, authenticate with backend
+      await _authenticateWithBackend(googleUser, userCredential.user!);
+
+      return userCredential;
     } catch (e) {
       print('AuthService: Google sign-in error: $e');
       rethrow;
@@ -101,6 +107,42 @@ class AuthService {
     );
 
     return await _auth.signInWithCredential(credential);
+  }
+
+  // Helper method to authenticate with backend after Google sign-in
+  Future<void> _authenticateWithBackend(
+      GoogleSignInAccount googleUser, User firebaseUser) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_backendUrl/api/users/google-auth'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'firebaseUid': firebaseUser.uid,
+          'email': googleUser.email,
+          'name': googleUser.displayName,
+          'profileImage': googleUser.photoUrl,
+        }),
+      );
+
+      final data = json.decode(response.body);
+
+      if (response.statusCode == 200 && data['success']) {
+        // Store backend session locally
+        try {
+          await SessionService()
+              .saveBackendUser((data['data'] as Map).cast<String, dynamic>());
+        } catch (e) {
+          print('Error saving backend session: $e');
+        }
+      } else {
+        print('Backend Google auth failed: ${data['message']}');
+      }
+    } catch (e) {
+      print('Error authenticating with backend: $e');
+      // Don't throw here as Firebase auth was successful
+    }
   }
 
   // Email authentication with MongoDB backend

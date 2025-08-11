@@ -33,6 +33,15 @@ class SessionService {
     return user != null && (user['_id'] as String?) != null;
   }
 
+  Future<bool> isBackendSessionValid() async {
+    final user = await getBackendUser();
+    if (user == null || user['_id'] == null) return false;
+    
+    // Check if the session has expired (optional - you can add expiration logic here)
+    // For now, we'll just check if the user data exists
+    return true;
+  }
+
   Future<void> clearBackendSession() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_backendUserKey);

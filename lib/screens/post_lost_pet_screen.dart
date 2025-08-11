@@ -133,15 +133,28 @@ class _PostLostPetScreenState extends State<PostLostPetScreen> {
                   label: 'Pet Type',
                   hint: 'Select pet type',
                   value: _selectedPetType,
-                  items: ['Dog', 'Cat', 'Bird', 'Other'],
-                  onChanged: (value) =>
-                      setState(() => _selectedPetType = value),
+                  items: [
+                    'Dog',
+                    'Cat',
+                    'Rabbit',
+                    'Hamster',
+                    'Guinea Pig',
+                    'Bird',
+                    'Other',
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedPetType = value;
+                      // Reset breed when pet type changes
+                      _selectedBreed = null;
+                    });
+                  },
                 ),
                 _buildDropdownField(
                   label: 'Breed',
                   hint: 'Select breed',
                   value: _selectedBreed,
-                  items: ['Golden Retriever', 'Poodle', 'Siamese', 'Other'],
+                  items: _getBreedOptions(),
                   onChanged: (value) => setState(() => _selectedBreed = value),
                 ),
 
@@ -556,6 +569,77 @@ class _PostLostPetScreenState extends State<PostLostPetScreen> {
     );
   }
 
+  // Get breed options based on selected pet type
+  List<String> _getBreedOptions() {
+    switch (_selectedPetType) {
+      case 'Dog':
+        return [
+          'Golden Retriever',
+          'Labrador Retriever',
+          'German Shepherd',
+          'Bulldog',
+          'Poodle',
+          'Beagle',
+          'Rottweiler',
+          'Yorkshire Terrier',
+          'Mixed Breed',
+          'Other',
+        ];
+      case 'Cat':
+        return [
+          'Persian',
+          'Siamese',
+          'Maine Coon',
+          'British Shorthair',
+          'Ragdoll',
+          'Bengal',
+          'Abyssinian',
+          'Russian Blue',
+          'Mixed Breed',
+          'Other',
+        ];
+      case 'Hamster':
+        return [
+          "Syrian (Golden Hamster)",
+          "Dwarf Campbell Russian",
+          "Dwarf Winter White Russian",
+          "Roborovski Dwarf",
+          "Chinese",
+        ];
+      case 'Guinea Pig':
+        return [
+          "American",
+          "Abyssinian",
+          "Peruvian",
+          "Silkie (Sheltie)",
+          "Teddy",
+          "Texel",
+          "Skinny Pig",
+        ];
+      case 'Bird':
+        return [
+          'Parrot',
+          'Canary',
+          'Budgie',
+          'Cockatiel',
+          'Finch',
+          'Lovebird',
+          'Other',
+        ];
+      case 'Rabbit':
+        return [
+          'Holland Lop',
+          'Netherland Dwarf',
+          'Lionhead',
+          'Mini Rex',
+          'Flemish Giant',
+          'Other',
+        ];
+      default:
+        return ['Mixed Breed', 'Other'];
+    }
+  }
+
   Future<void> _postLostPet() async {
     if (_selectedPetType == null ||
         _selectedBreed == null ||
@@ -585,6 +669,7 @@ class _PostLostPetScreenState extends State<PostLostPetScreen> {
         color: _selectedCollarColor ?? 'Other',
         homeLocation: _lastKnownLocationController.text.trim(),
         ownerId: ownerId,
+        registrationType: 'reported', // Mark as reported pet
       );
       final petId = (created['data'] as Map)['_id'] as String;
       if (_pickedPhotos.isNotEmpty) {
@@ -594,11 +679,21 @@ class _PostLostPetScreenState extends State<PostLostPetScreen> {
         );
       }
       // Mark as lost
-      await petService.markLost(petId);
-      if (mounted) Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Lost pet posted successfully'),
-          backgroundColor: Colors.green));
+      await petService.markPetAsLost(petId);
+      if (mounted) {
+        Navigator.pop(context);
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Lost pet posted successfully'),
+            backgroundColor: Colors.green));
+        // Refresh the home screen to show the new lost pet
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const PetTrackingHomeScreen(),
+          ),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red));

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'auth_service.dart';
 import 'session_service.dart';
 
@@ -147,10 +149,76 @@ class UserService {
 
   // Get user ID (Firebase UID or MongoDB _id)
   Future<String?> getUserId() async {
-    final firebaseUser = _authService.currentUser;
-    if (firebaseUser != null) return firebaseUser.uid;
+    // First check if we have a backend session (for Google users or email/phone users)
+    final backendUserId = await _sessionService.getBackendUserId();
+    if (backendUserId != null) {
+      return backendUserId;
+    }
 
-    return await _sessionService.getBackendUserId();
+    // For Google users, try to authenticate with backend if no session exists
+    final firebaseUser = _authService.currentUser;
+    if (firebaseUser != null) {
+      // Check if this is a Google user and try to authenticate with backend
+      final hasBackendSession = await _sessionService.hasBackendSession();
+      if (!hasBackendSession) {
+        // Try to authenticate with backend
+        final success = await _ensureBackendSession(firebaseUser);
+        if (success) {
+          return await _sessionService.getBackendUserId();
+        }
+      }
+      return firebaseUser.uid;
+    }
+
+    return null;
+  }
+
+  // Ensure Google users have a backend session
+  Future<bool> _ensureBackendSession(User firebaseUser) async {
+    try {
+      print(
+          'UserService: Ensuring backend session for Google user: ${firebaseUser.uid}');
+
+      // Get Google account info
+      final googleSignIn = GoogleSignIn();
+      final googleUser = await googleSignIn.signInSilently();
+
+      if (googleUser != null) {
+        print('UserService: Found Google account: ${googleUser.email}');
+
+        final response = await http.post(
+          Uri.parse('$_backendUrl/api/users/google-auth'),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: json.encode({
+            'firebaseUid': firebaseUser.uid,
+            'email': googleUser.email,
+            'name': googleUser.displayName,
+            'profileImage': googleUser.photoUrl,
+          }),
+        );
+
+        print('UserService: Backend response status: ${response.statusCode}');
+        final data = json.decode(response.body);
+
+        if (response.statusCode == 200 && data['success']) {
+          print('UserService: Backend authentication successful');
+          // Store backend session locally
+          await _sessionService
+              .saveBackendUser((data['data'] as Map).cast<String, dynamic>());
+          return true;
+        } else {
+          print(
+              'UserService: Backend authentication failed: ${data['message']}');
+        }
+      } else {
+        print('UserService: No Google account found for silent sign-in');
+      }
+    } catch (e) {
+      print('UserService: Error ensuring backend session: $e');
+    }
+    return false;
   }
 
   // Get authentication provider

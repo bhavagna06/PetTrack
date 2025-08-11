@@ -60,22 +60,20 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
   void initState() {
     super.initState();
     if (widget.petId != null) {
-      _loadExistingPetData();
+      _loadPetData();
     }
   }
 
-  Future<void> _loadExistingPetData() async {
+  Future<void> _loadPetData() async {
+    if (widget.petId == null) return;
+
     try {
       setState(() {
         _isLoading = true;
       });
 
-      // Fetch pet data from backend
-      final pets = await _petService.fetchPets();
-      final pet = pets.firstWhere(
-        (p) => p['_id'] == widget.petId,
-        orElse: () => {},
-      );
+      // Fetch pet data from backend using getPetById
+      final pet = await _petService.getPetById(widget.petId!);
 
       if (pet.isNotEmpty) {
         setState(() {

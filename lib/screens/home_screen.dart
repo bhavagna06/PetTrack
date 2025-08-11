@@ -45,10 +45,16 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
       _error = null;
     });
     try {
-      // Load lost pets
-      final lostPets = await _petService.fetchPets(isLost: true);
-      // Load found pets
-      final foundPets = await _petService.fetchPets(isFound: true);
+      // Load lost pets (both reported pets and registered pets marked as lost)
+      final lostPets = await _petService.fetchPets(
+        isLost: true,
+        // Remove registrationType filter to include both reported and registered pets
+      );
+      // Load found pets (both reported pets and registered pets marked as found)
+      final foundPets = await _petService.fetchPets(
+        isFound: true,
+        // Remove registrationType filter to include both reported and registered pets
+      );
 
       setState(() {
         _lostPets = lostPets;
@@ -607,20 +613,29 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
   }
 
   Widget _buildPetCard(Map<String, dynamic> pet) {
-    final type = pet['petType']?.toString() ?? '-';
-    final name = pet['petName']?.toString() ?? '-';
-    final description = pet['breed']?.toString() ?? '';
-    final gender = pet['gender']?.toString() ?? '';
+    final name = pet['petName']?.toString() ?? 'Unknown Pet';
+    final type = pet['petType']?.toString() ?? 'Unknown Type';
+    final breed = pet['breed']?.toString() ?? 'Unknown Breed';
+    final gender = pet['gender']?.toString() ?? 'Unknown Gender';
+    final description = '$breed • ${pet['color'] ?? 'Unknown Color'}';
     final imageUrl = pet['profileImage']?.toString() ?? '';
     final isLost = pet['isLost'] == true;
     final isFound = pet['isFound'] == true;
+    final registrationType =
+        pet['registrationType']?.toString() ?? 'registered';
 
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => PetDetailsScreen(pet: pet),
+            builder: (context) => PetDetailsScreen(
+              pet: pet,
+              onPetStatusChanged: () {
+                // Refresh the pets list when status changes
+                _loadPets();
+              },
+            ),
           ),
         );
       },
@@ -715,13 +730,41 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    gender,
-                    style: const TextStyle(
-                      color: Color(0xFF9C7649),
-                      fontSize: 14,
-                      fontWeight: FontWeight.normal,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        gender,
+                        style: const TextStyle(
+                          color: Color(0xFF9C7649),
+                          fontSize: 14,
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Registration type indicator
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: registrationType == 'registered'
+                              ? Colors.blue.withOpacity(0.1)
+                              : Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          registrationType == 'registered'
+                              ? 'REGISTERED'
+                              : 'REPORTED',
+                          style: TextStyle(
+                            color: registrationType == 'registered'
+                                ? Colors.blue
+                                : Colors.orange,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

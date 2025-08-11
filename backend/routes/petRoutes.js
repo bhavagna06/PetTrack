@@ -80,7 +80,8 @@ router.post('/', upload.single('profileImage'), validatePetData, handleValidatio
       gender,
       color,
       homeLocation,
-      ownerId
+      ownerId,
+      registrationType = 'registered' // Default to registered
     } = req.body;
 
     // Create pet object
@@ -91,7 +92,8 @@ router.post('/', upload.single('profileImage'), validatePetData, handleValidatio
       gender,
       color,
       homeLocation,
-      ownerId
+      ownerId,
+      registrationType
     };
 
     // Upload profile image to Firebase if provided
@@ -138,6 +140,7 @@ router.get('/', async (req, res) => {
       petType,
       isLost,
       isFound,
+      registrationType,
       limit = 20,
       page = 1
     } = req.query;
@@ -149,6 +152,7 @@ router.get('/', async (req, res) => {
     if (petType) filter.petType = petType;
     if (isLost !== undefined) filter.isLost = isLost === 'true';
     if (isFound !== undefined) filter.isFound = isFound === 'true';
+    if (registrationType) filter.registrationType = registrationType;
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);

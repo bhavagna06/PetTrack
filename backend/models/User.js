@@ -19,16 +19,35 @@ const userSchema = new mongoose.Schema({
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
   },
   
+  // Firebase Authentication
+  firebaseUid: {
+    type: String,
+    unique: true,
+    sparse: true, // Allow null values but ensure uniqueness for non-null values
+    trim: true
+  },
+  
+  authProvider: {
+    type: String,
+    enum: ['email', 'phone', 'google'],
+    default: 'email'
+  },
+  
   phone: {
     type: String,
-    required: [true, 'Phone number is required'],
+    required: function() {
+      return this.authProvider === 'phone' || this.authProvider === 'email';
+    },
     unique: true,
+    sparse: true, // Allow null values for Google users
     trim: true
   },
   
   password: {
     type: String,
-    required: [true, 'Password is required'],
+    required: function() {
+      return this.authProvider === 'email' || this.authProvider === 'phone';
+    },
     minlength: [6, 'Password must be at least 6 characters long'],
     select: false // Don't include password in queries by default
   },

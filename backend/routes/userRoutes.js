@@ -77,6 +77,90 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
+// @route   POST /api/users/google-auth
+// @desc    Authenticate or create user with Google
+// @access  Public
+router.post('/google-auth', async (req, res) => {
+  try {
+    const {
+      firebaseUid,
+      email,
+      name,
+      profileImage
+    } = req.body;
+
+    if (!firebaseUid || !email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Firebase UID and email are required'
+      });
+    }
+
+    // Check if user already exists with this Firebase UID
+    let user = await User.findOne({ firebaseUid });
+
+    if (!user) {
+      // Check if user exists with this email
+      user = await User.findOne({ email: email.toLowerCase() });
+
+      if (user) {
+        // User exists with email but no Firebase UID, update it
+        user.firebaseUid = firebaseUid;
+        if (name && !user.name) user.name = name;
+        if (profileImage && !user.profileImage) user.profileImage = profileImage;
+        await user.save();
+      } else {
+        // Create new user
+        const userData = {
+          firebaseUid,
+          email: email.toLowerCase(),
+          name: name || 'Google User',
+          authProvider: 'google',
+          isEmailVerified: true
+        };
+
+        if (profileImage) {
+          userData.profileImage = profileImage;
+        }
+
+        user = new User(userData);
+        await user.save();
+      }
+    } else {
+      // User exists, update profile if needed
+      let updated = false;
+      if (name && user.name !== name) {
+        user.name = name;
+        updated = true;
+      }
+      if (profileImage && user.profileImage !== profileImage) {
+        user.profileImage = profileImage;
+        updated = true;
+      }
+      if (updated) {
+        await user.save();
+      }
+    }
+
+    // Return user data without password
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    res.status(200).json({
+      success: true,
+      message: 'Google authentication successful',
+      data: userResponse
+    });
+
+  } catch (error) {
+    console.error('Google auth error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error during Google authentication'
+    });
+  }
+});
+
 // @route   POST /api/users/register
 // @desc    Register a new user
 // @access  Public

@@ -47,7 +47,11 @@ class _PetsScreenState extends State<PetsScreen> {
         return;
       }
 
-      final pets = await _petService.fetchPets(ownerId: userId);
+      // Only fetch registered pets (not reported pets)
+      final pets = await _petService.fetchPets(
+        ownerId: userId,
+        registrationType: 'registered',
+      );
       setState(() {
         _pets = pets;
         _isLoading = false;
@@ -199,7 +203,13 @@ class _PetsScreenState extends State<PetsScreen> {
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => PetDetailsScreen(pet: pet),
+              builder: (context) => PetDetailsScreen(
+                pet: pet,
+                onPetStatusChanged: () {
+                  // Refresh the pets list when status changes
+                  _loadUserPets();
+                },
+              ),
             ),
           );
           // Refresh the pets list when returning from pet profile screen

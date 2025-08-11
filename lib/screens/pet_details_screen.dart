@@ -5,25 +5,123 @@
 
 import 'package:flutter/material.dart';
 import 'pet_profile_screen.dart';
+import '../services/pet_service.dart';
 
 class PetDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> pet;
-  const PetDetailsScreen({Key? key, required this.pet}) : super(key: key);
+  final VoidCallback? onPetStatusChanged; // Add callback for status changes
+  const PetDetailsScreen({Key? key, required this.pet, this.onPetStatusChanged})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFCFAF8),
       body: SafeArea(
-        child: PetDetailsWidget(pet: pet),
+        child:
+            PetDetailsWidget(pet: pet, onPetStatusChanged: onPetStatusChanged),
       ),
     );
   }
 }
 
-class PetDetailsWidget extends StatelessWidget {
+class PetDetailsWidget extends StatefulWidget {
   final Map<String, dynamic> pet;
-  const PetDetailsWidget({Key? key, required this.pet}) : super(key: key);
+  final VoidCallback? onPetStatusChanged; // Add callback for status changes
+  const PetDetailsWidget({Key? key, required this.pet, this.onPetStatusChanged})
+      : super(key: key);
+
+  @override
+  State<PetDetailsWidget> createState() => _PetDetailsWidgetState();
+}
+
+class _PetDetailsWidgetState extends State<PetDetailsWidget> {
+  final PetService _petService = PetService();
+  bool _isUpdatingStatus = false;
+
+  Future<void> _markPetAsLost() async {
+    if (_isUpdatingStatus) return;
+
+    setState(() {
+      _isUpdatingStatus = true;
+    });
+
+    try {
+      await _petService.markPetAsLost(widget.pet['_id']);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pet marked as lost successfully'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        // Update the local pet data
+        setState(() {
+          widget.pet['isLost'] = true;
+          widget.pet['isFound'] = false;
+        });
+        widget.onPetStatusChanged?.call(); // Call the callback
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to mark pet as lost: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingStatus = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _markPetAsFound() async {
+    if (_isUpdatingStatus) return;
+
+    setState(() {
+      _isUpdatingStatus = true;
+    });
+
+    try {
+      await _petService.markPetAsFound(widget.pet['_id']);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pet marked as found successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Update the local pet data
+        setState(() {
+          widget.pet['isFound'] = true;
+          widget.pet['isLost'] = false;
+        });
+        widget.onPetStatusChanged?.call(); // Call the callback
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to mark pet as found: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdatingStatus = false;
+        });
+      }
+    }
+  }
 
   Widget _infoRow(IconData icon, String label, String value) {
     return Container(
@@ -68,17 +166,17 @@ class PetDetailsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = pet['petName'] ?? 'Unknown Pet';
-    final profileImage = pet['profileImage'] as String?;
-    final petType = pet['petType'] ?? 'Unknown';
-    final breed = pet['breed'] ?? 'Unknown breed';
-    final color = pet['color'] ?? 'Unknown';
-    // final age = pet['age']?.toString() ?? 'Unknown';
-    final gender = pet['gender'] ?? 'Unknown';
-    // final isVaccinated = pet['isVaccinated'] == true ? 'Yes' : 'No';
-    final description = pet['description'] ?? '';
-    final address = pet['address'] ?? 'No address provided';
-    final isLost = pet['isLost'] == true;
+    final name = widget.pet['petName'] ?? 'Unknown Pet';
+    final profileImage = widget.pet['profileImage'] as String?;
+    final petType = widget.pet['petType'] ?? 'Unknown';
+    final breed = widget.pet['breed'] ?? 'Unknown breed';
+    final color = widget.pet['color'] ?? 'Unknown';
+    // final age = widget.pet['age']?.toString() ?? 'Unknown';
+    final gender = widget.pet['gender'] ?? 'Unknown';
+    // final isVaccinated = widget.pet['isVaccinated'] == true ? 'Yes' : 'No';
+    final description = widget.pet['description'] ?? '';
+    final address = widget.pet['address'] ?? 'No address provided';
+    final isLost = widget.pet['isLost'] == true;
 
     return Column(
       children: [
@@ -266,7 +364,7 @@ class PetDetailsWidget extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (context) =>
-                            PetProfileScreen(petId: pet['_id']),
+                            PetProfileScreen(petId: widget.pet['_id']),
                       ),
                     );
                   },
@@ -301,6 +399,94 @@ class PetDetailsWidget extends StatelessWidget {
                         ),
                         const Icon(Icons.arrow_forward_ios,
                             color: Color(0xFF9C7649), size: 16),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Report Lost button
+                GestureDetector(
+                  onTap: _markPetAsLost,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF4EEE7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.warning_amber_outlined,
+                            color: Colors.red,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        const Expanded(
+                          child: Text(
+                            'Report Lost',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontSize: 16,
+                              fontFamily: 'Plus Jakarta Sans',
+                            ),
+                          ),
+                        ),
+                        if (_isUpdatingStatus)
+                          const SizedBox(
+                              width: 16,
+                              child:
+                                  CircularProgressIndicator(color: Colors.red)),
+                        const Icon(Icons.arrow_forward_ios,
+                            color: Colors.red, size: 16),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Report Found button
+                GestureDetector(
+                  onTap: _markPetAsFound,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF4EEE7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.check_circle_outline,
+                            color: Colors.green,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        const Expanded(
+                          child: Text(
+                            'Report Found',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontSize: 16,
+                              fontFamily: 'Plus Jakarta Sans',
+                            ),
+                          ),
+                        ),
+                        if (_isUpdatingStatus)
+                          const SizedBox(
+                              width: 16,
+                              child: CircularProgressIndicator(
+                                  color: Colors.green)),
+                        const Icon(Icons.arrow_forward_ios,
+                            color: Colors.green, size: 16),
                       ],
                     ),
                   ),

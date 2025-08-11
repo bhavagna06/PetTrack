@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
+import 'session_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -120,7 +121,11 @@ class AuthService {
       final data = json.decode(response.body);
 
       if (response.statusCode == 200 && data['success']) {
-        // Store user data locally (you might want to use SharedPreferences or secure storage)
+        // Store backend session locally for later (ownerId, etc.)
+        try {
+          await SessionService()
+              .saveBackendUser((data['data'] as Map).cast<String, dynamic>());
+        } catch (_) {}
         return {
           'success': true,
           'user': data['data'],
@@ -160,6 +165,10 @@ class AuthService {
       final data = json.decode(response.body);
 
       if (response.statusCode == 200 && data['success']) {
+        try {
+          await SessionService()
+              .saveBackendUser((data['data'] as Map).cast<String, dynamic>());
+        } catch (_) {}
         return {
           'success': true,
           'user': data['data'],
@@ -233,6 +242,10 @@ class AuthService {
       final data = json.decode(response.body);
 
       if (response.statusCode == 201 && data['success']) {
+        try {
+          await SessionService()
+              .saveBackendUser((data['data'] as Map).cast<String, dynamic>());
+        } catch (_) {}
         return {
           'success': true,
           'user': data['data'],
@@ -270,6 +283,9 @@ class AuthService {
       await _googleSignIn.signOut();
       await _auth.signOut();
       // Clear any local user data here
+      try {
+        await SessionService().clearBackendSession();
+      } catch (_) {}
     } catch (e) {
       print('Sign out error: $e');
     }

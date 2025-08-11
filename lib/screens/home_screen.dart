@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'profile_screen.dart';
 import 'post_lost_pet_screen.dart';
 import 'post_found_pet_screen.dart';
+import 'pet_details_screen.dart';
+import '../services/pet_service.dart';
 
 class PetTrackingHomeScreen extends StatefulWidget {
   const PetTrackingHomeScreen({Key? key}) : super(key: key);
@@ -17,6 +19,11 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedSearchCategory = 'All';
   bool _isSearchExpanded = false;
+  List<Map<String, dynamic>> _lostPets = [];
+  List<Map<String, dynamic>> _foundPets = [];
+  bool _isLoading = true;
+  String? _error;
+  final PetService _petService = PetService();
 
   final List<String> _searchCategories = [
     'All',
@@ -26,53 +33,66 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
     'Other',
   ];
 
-  final List<Map<String, String>> recentLostPets = [
-    {
-      'type': 'Lost Dog',
-      'name': 'Max',
-      'description': 'Golden Retriever, Male, 2 years old',
-      'image':
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuCuE3DDMhXMOCthVpQZkL_tOdgkue7nXZls-H7TGGcdPGgX68yy0CoN_BNISuJg1tGTi6evYcJYMEczBbGoNkY6gFMsKajGy3tj_4Qlf6N-dvd1kYjXqcXKg2GL5j2x7_OvK2dujWVUGXiEu1KfVK2tU4ZsHhok9_2AQE6ZqIYIwJYN-tFIygdb-ZZjPz7Bz1EevxT8VaMnYpBs21GXXlPDezx0xnysqiX_lrr-u8KT0QqH46GFMPJAz9Soiv09izz8WJUX6gXx6w',
-    },
-    {
-      'type': 'Lost Cat',
-      'name': 'Whiskers',
-      'description': 'Siamese, Female, 3 years old',
-      'image':
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuA12yVAhHnXfVNbz9Gtw9Nir7LXPVMPTZKKFOsOFIDlec42RUTM2qE-h-azE0IVNKsrWlA6AgdHq6x9PW0lQlLsOHcEozEhzwc89_BejPtvivDERmtFF8srkp46r3zggxMq9ThJpy9tw8VEGYCERLWH85TwbgUhtKO_EDBTreChCgTlbBwP8N6g_2AYpaa4HXzjGMgpCfMB6ntQfq3C-DmAeGQKBPuCYLMD5PI50yUgWm3n2DciUpXDJKenIomjncBkasSVAbihZw',
-    },
-    {
-      'type': 'Lost Dog',
-      'name': 'Buddy',
-      'description': 'Labrador, Male, 5 years old',
-      'image':
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuDtKUcBJF7g2iXoki-MvpnaS3hUaewk8UVWSs5AfllqzKfT_EdeNkX02kH8qTHFk_CiSufU4OF2M-eR9eKE5Y2R06PDiG31bBy-_sQixBldpdZc5K6tF3Yt6FmqdscJOCKOo6us898qJKHvuq_6pljdpyimnao76G2Vx0jOdtDcFJ7a_cf97R278ToDsxDLO0XlnNenA7YLC_ekla2wrq_OtRoA0rK7oh5aJOHESuo15O-s796rUPyyLqRb3_qJWB1VOGVyF_TYVQ',
-    },
-    {
-      'type': 'Lost Cat',
-      'name': 'Mittens',
-      'description': 'Tabby, Female, 1 year old',
-      'image':
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuCCToixK_FBjhwXRs_29DlPgJP-FXxAFrcPdviZY_NnyLFobVN_f-ryzkGmCsAzj3-IOqSprknGKQxBrtSZFL4npD7Ai0sEq5M1YVvorKLXfF6QG47-l0uGs3r6uFSltQbEPnMGiBqjA5aCyIVxBA9BaJvKhYxmQ8pw58Id14NqLNZyaTLuKPTr1aoNgSEn_AmNoBi5u8FR8qeu8PBVulkZ9-F4OU82jOvTkyGX0lcaVSgvLxvjaZP7Xy3t7W3MFCZkKsrQYX8sQw',
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadPets();
+  }
 
-  List<Map<String, String>> get filteredPets {
-    if (_searchController.text.isEmpty && _selectedSearchCategory == 'All') {
-      return recentLostPets;
+  Future<void> _loadPets() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      // Load lost pets
+      final lostPets = await _petService.fetchPets(isLost: true);
+      // Load found pets
+      final foundPets = await _petService.fetchPets(isFound: true);
+
+      setState(() {
+        _lostPets = lostPets;
+        _foundPets = foundPets;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
 
-    return recentLostPets.where((pet) {
+  List<Map<String, dynamic>> get filteredLostPets {
+    if (_searchController.text.isEmpty && _selectedSearchCategory == 'All') {
+      return _lostPets;
+    }
+    return _lostPets.where((pet) {
+      final type = (pet['petType'] ?? '').toString().toLowerCase();
+      final name = (pet['petName'] ?? '').toString().toLowerCase();
       bool matchesCategory = _selectedSearchCategory == 'All' ||
-          pet['type']!
-              .toLowerCase()
-              .contains(_selectedSearchCategory.toLowerCase());
-
+          type.contains(_selectedSearchCategory.toLowerCase());
       bool matchesName = _searchController.text.isEmpty ||
-          pet['name']!
-              .toLowerCase()
-              .contains(_searchController.text.toLowerCase());
+          name.contains(_searchController.text.toLowerCase());
+      return matchesCategory && matchesName;
+    }).toList();
+  }
 
+  List<Map<String, dynamic>> get filteredFoundPets {
+    if (_searchController.text.isEmpty && _selectedSearchCategory == 'All') {
+      return _foundPets;
+    }
+    return _foundPets.where((pet) {
+      final type = (pet['petType'] ?? '').toString().toLowerCase();
+      final name = (pet['petName'] ?? '').toString().toLowerCase();
+      bool matchesCategory = _selectedSearchCategory == 'All' ||
+          type.contains(_selectedSearchCategory.toLowerCase());
+      bool matchesName = _searchController.text.isEmpty ||
+          name.contains(_searchController.text.toLowerCase());
       return matchesCategory && matchesName;
     }).toList();
   }
@@ -93,15 +113,15 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
           MaterialPageRoute(
             builder: (context) => const PostLostPetScreen(),
           ),
-        );
+        ).then((_) => _loadPets()); // Refresh pets when returning
         break;
       case 2: // Post Found
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => const PostFindtPetScreen(),
+            builder: (context) => const PostFoundPetScreen(),
           ),
-        );
+        ).then((_) => _loadPets()); // Refresh pets when returning
         break;
       case 3: // Profile
         Navigator.push(
@@ -166,7 +186,7 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
                               setState(() {});
                             },
                             decoration: const InputDecoration(
-                              hintText: 'Search for lost pets by name...',
+                              hintText: 'Search for pets by name...',
                               hintStyle: TextStyle(
                                 color: Color(0xFF9C7649),
                                 fontSize: 16,
@@ -261,96 +281,21 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
               ),
             ),
 
-            // Recent Lost Pets Title
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-              alignment: Alignment.centerLeft,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _searchController.text.isNotEmpty ||
-                            _selectedSearchCategory != 'All'
-                        ? 'Search Results (${filteredPets.length})'
-                        : 'Recent Lost Pets',
-                    style: const TextStyle(
-                      color: Color(0xFF1C150D),
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.015,
-                    ),
-                  ),
-                  if (_searchController.text.isNotEmpty ||
-                      _selectedSearchCategory != 'All')
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _searchController.clear();
-                          _selectedSearchCategory = 'All';
-                          _isSearchExpanded = false;
-                        });
-                      },
-                      child: const Text(
-                        'Clear',
-                        style: TextStyle(
-                          color: Color(0xFFF2870C),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-
-            // Recent Lost Pets List
+            // Content Area
             Expanded(
-              child: filteredPets.isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.search_off,
-                            size: 64,
-                            color: Color(0xFF9C7649),
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'No pets found',
-                            style: TextStyle(
-                              color: Color(0xFF9C7649),
-                              fontSize: 18,
-                              fontWeight: FontWeight.w500,
+              child: RefreshIndicator(
+                onRefresh: _loadPets,
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : (_error != null
+                        ? Center(
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: Colors.red),
                             ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Try adjusting your search criteria',
-                            style: TextStyle(
-                              color: Color(0xFF9C7649),
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: filteredPets.length,
-                      itemBuilder: (context, index) {
-                        final pet = filteredPets[index];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          child: _buildPetCard(
-                            type: pet['type']!,
-                            name: pet['name']!,
-                            description: pet['description']!,
-                            imageUrl: pet['image']!,
-                          ),
-                        );
-                      },
-                    ),
+                          )
+                        : _buildContent()),
+              ),
             ),
           ],
         ),
@@ -401,67 +346,423 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
     );
   }
 
-  Widget _buildPetCard({
-    required String type,
-    required String name,
-    required String description,
-    required String imageUrl,
-  }) {
-    return Row(
+  Widget _buildContent() {
+    final hasSearchResults =
+        _searchController.text.isNotEmpty || _selectedSearchCategory != 'All';
+
+    if (hasSearchResults) {
+      final allResults = [...filteredLostPets, ...filteredFoundPets];
+      return _buildSearchResults(allResults);
+    }
+
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // Lost Pets Section
+          _buildLostPetsSection(),
+
+          const SizedBox(height: 24),
+
+          // Found Pets Section
+          _buildFoundPetsSection(),
+
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchResults(List<Map<String, dynamic>> results) {
+    return Column(
       children: [
-        // Pet Information
-        Expanded(
-          flex: 2,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        // Search Results Header
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                type,
-                style: const TextStyle(
-                  color: Color(0xFF9C7649),
-                  fontSize: 14,
-                  fontWeight: FontWeight.normal,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                name,
+                'Search Results (${results.length})',
                 style: const TextStyle(
                   color: Color(0xFF1C150D),
-                  fontSize: 16,
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
+                  letterSpacing: -0.015,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                description,
-                style: const TextStyle(
-                  color: Color(0xFF9C7649),
-                  fontSize: 14,
-                  fontWeight: FontWeight.normal,
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _searchController.clear();
+                    _selectedSearchCategory = 'All';
+                    _isSearchExpanded = false;
+                  });
+                },
+                child: const Text(
+                  'Clear',
+                  style: TextStyle(
+                    color: Color(0xFFF2870C),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
           ),
         ),
 
-        const SizedBox(width: 16),
-
-        // Pet Image
-        Expanded(
-          flex: 1,
-          child: Container(
-            height: 80,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              image: DecorationImage(
-                image: NetworkImage(imageUrl),
-                fit: BoxFit.cover,
+        // Search Results List
+        results.isEmpty
+            ? const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.search_off,
+                      size: 64,
+                      color: Color(0xFF9C7649),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'No pets found',
+                      style: TextStyle(
+                        color: Color(0xFF9C7649),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Try adjusting your search criteria',
+                      style: TextStyle(
+                        color: Color(0xFF9C7649),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: results.length,
+                itemBuilder: (context, index) {
+                  final pet = results[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: _buildPetCard(pet),
+                  );
+                },
               ),
-            ),
+      ],
+    );
+  }
+
+  Widget _buildLostPetsSection() {
+    return Column(
+      children: [
+        // Lost Pets Title
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Lost Pets',
+                style: TextStyle(
+                  color: Color(0xFF1C150D),
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.015,
+                ),
+              ),
+            ],
           ),
         ),
+
+        // Lost Pets List
+        filteredLostPets.isEmpty
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: const Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.pets,
+                        size: 48,
+                        color: Color(0xFF9C7649),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'No lost pets reported',
+                        style: TextStyle(
+                          color: Color(0xFF9C7649),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: filteredLostPets.length,
+                itemBuilder: (context, index) {
+                  final pet = filteredLostPets[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: _buildPetCard(pet),
+                  );
+                },
+              ),
       ],
+    );
+  }
+
+  Widget _buildFoundPetsSection() {
+    return Column(
+      children: [
+        // Found Pets Title
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: Colors.green,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Found Pets',
+                style: TextStyle(
+                  color: Color(0xFF1C150D),
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.015,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Found Pets List
+        filteredFoundPets.isEmpty
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: const Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.pets,
+                        size: 48,
+                        color: Color(0xFF9C7649),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'No found pets reported',
+                        style: TextStyle(
+                          color: Color(0xFF9C7649),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: filteredFoundPets.length,
+                itemBuilder: (context, index) {
+                  final pet = filteredFoundPets[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: _buildPetCard(pet),
+                  );
+                },
+              ),
+      ],
+    );
+  }
+
+  Widget _buildPetCard(Map<String, dynamic> pet) {
+    final type = pet['petType']?.toString() ?? '-';
+    final name = pet['petName']?.toString() ?? '-';
+    final description = pet['breed']?.toString() ?? '';
+    final gender = pet['gender']?.toString() ?? '';
+    final imageUrl = pet['profileImage']?.toString() ?? '';
+    final isLost = pet['isLost'] == true;
+    final isFound = pet['isFound'] == true;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PetDetailsScreen(pet: pet),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0xFFF4EEE7),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Pet Information
+            Expanded(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        type,
+                        style: const TextStyle(
+                          color: Color(0xFF9C7649),
+                          fontSize: 14,
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (isLost)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'LOST',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      if (isFound)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'FOUND',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      color: Color(0xFF1C150D),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      color: Color(0xFF9C7649),
+                      fontSize: 14,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    gender,
+                    style: const TextStyle(
+                      color: Color(0xFF9C7649),
+                      fontSize: 14,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 16),
+
+            // Pet Image
+            Expanded(
+              flex: 1,
+              child: Container(
+                height: 80,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: const Color(0xFFF4EEE7),
+                ),
+                child: imageUrl.isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(
+                              Icons.pets,
+                              size: 32,
+                              color: Color(0xFF9C7649),
+                            );
+                          },
+                        ),
+                      )
+                    : const Icon(
+                        Icons.pets,
+                        size: 32,
+                        color: Color(0xFF9C7649),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

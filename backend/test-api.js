@@ -14,6 +14,7 @@ const testPet = {
   petName: 'Test Pet',
   petType: 'Dog',
   breed: 'Golden Retriever',
+  gender: 'Male',
   color: 'Golden',
   homeLocation: '123 Test St, Test City, TS 12345'
 };
@@ -198,6 +199,66 @@ async function testDeleteUser() {
   }
 }
 
+async function testMarkPetAsLost() {
+  if (!petId) {
+    logResult('Mark Pet as Lost', false, null, 'No pet ID available');
+    return false;
+  }
+
+  try {
+    const response = await axios.post(`${BASE_URL}/api/pets/${petId}/mark-lost`);
+    logResult('Mark Pet as Lost', response.status === 200, response.data);
+    return true;
+  } catch (error) {
+    logResult('Mark Pet as Lost', false, null, error.response?.data || error);
+    return false;
+  }
+}
+
+async function testMarkPetAsFound() {
+  if (!petId) {
+    logResult('Mark Pet as Found', false, null, 'No pet ID available');
+    return false;
+  }
+
+  try {
+    const response = await axios.post(`${BASE_URL}/api/pets/${petId}/mark-found`);
+    logResult('Mark Pet as Found', response.status === 200, response.data);
+    return true;
+  } catch (error) {
+    logResult('Mark Pet as Found', false, null, error.response?.data || error);
+    return false;
+  }
+}
+
+async function testGetLostPets() {
+  try {
+    const response = await axios.get(`${BASE_URL}/api/pets?isLost=true`);
+    logResult('Get Lost Pets', response.status === 200, {
+      count: response.data.data.length,
+      pagination: response.data.pagination
+    });
+    return true;
+  } catch (error) {
+    logResult('Get Lost Pets', false, null, error.response?.data || error);
+    return false;
+  }
+}
+
+async function testGetFoundPets() {
+  try {
+    const response = await axios.get(`${BASE_URL}/api/pets?isFound=true`);
+    logResult('Get Found Pets', response.status === 200, {
+      count: response.data.data.length,
+      pagination: response.data.pagination
+    });
+    return true;
+  } catch (error) {
+    logResult('Get Found Pets', false, null, error.response?.data || error);
+    return false;
+  }
+}
+
 // Main test runner
 async function runTests() {
   console.log('🧪 Starting PetTrack API Tests...\n');
@@ -213,6 +274,10 @@ async function runTests() {
     { name: 'Update Pet', fn: testUpdatePet },
     { name: 'Get Pets by Owner', fn: testGetPetsByOwner },
     { name: 'Get All Users', fn: testGetUsers },
+    { name: 'Mark Pet as Lost', fn: testMarkPetAsLost },
+    { name: 'Get Lost Pets', fn: testGetLostPets },
+    { name: 'Mark Pet as Found', fn: testMarkPetAsFound },
+    { name: 'Get Found Pets', fn: testGetFoundPets },
     { name: 'Delete Pet', fn: testDeletePet },
     { name: 'Delete User', fn: testDeleteUser }
   ];
@@ -253,6 +318,10 @@ module.exports = {
   testUpdatePet,
   testGetPetsByOwner,
   testGetUsers,
+  testMarkPetAsLost,
+  testMarkPetAsFound,
+  testGetLostPets,
+  testGetFoundPets,
   testDeletePet,
   testDeleteUser
 }; 

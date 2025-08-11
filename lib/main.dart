@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart'; // NEW: for theme provider
 import 'screens/welcome_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/post_lost_pet_screen.dart';
 import 'theme/app_theme.dart';
+import 'services/session_service.dart';
+import '../theme_provider.dart'; // NEW: your theme state manager
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,7 +28,12 @@ void main() async {
     print('Firebase initialization failed: $e');
   }
 
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeProvider(), // NEW: provide theme state globally
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -34,9 +41,13 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider =
+        Provider.of<ThemeProvider>(context); // listen to theme changes
+
     return MaterialApp(
       title: 'PetTrack',
       debugShowCheckedModeBanner: false,
+      themeMode: themeProvider.themeMode, // NEW: dynamic theme switching
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       home: const AppWrapper(),
@@ -44,8 +55,21 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class AppWrapper extends StatelessWidget {
+class AppWrapper extends StatefulWidget {
   const AppWrapper({super.key});
+
+  @override
+  State<AppWrapper> createState() => _AppWrapperState();
+}
+
+class _AppWrapperState extends State<AppWrapper> {
+  Future<bool>? _hasBackendSession;
+
+  @override
+  void initState() {
+    super.initState();
+    _hasBackendSession = SessionService().hasBackendSession();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,7 +125,6 @@ class AppWrapper extends StatelessWidget {
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: () {
-                      // Restart the app
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(
@@ -117,14 +140,24 @@ class AppWrapper extends StatelessWidget {
           );
         }
 
-        // Check if user is signed in
+        // Check if user is signed in to Firebase or has a backend session
         if (snapshot.hasData && snapshot.data != null) {
-          // User is signed in
           return const PetTrackingHomeScreen();
-        } else {
-          // User is not signed in
-          return const WelcomeScreen();
         }
+        return FutureBuilder<bool>(
+          future: _hasBackendSession,
+          builder: (context, sessionSnap) {
+            if (sessionSnap.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (sessionSnap.data == true) {
+              return const PetTrackingHomeScreen();
+            }
+            return const WelcomeScreen();
+          },
+        );
       },
     );
   }

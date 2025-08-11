@@ -7,15 +7,27 @@ import 'home_screen.dart';
 import 'post_lost_pet_screen.dart';
 import 'post_found_pet_screen.dart';
 import 'profile_screen.dart'; // Added import for ProfileScreen
+import 'package:image_picker/image_picker.dart';
+import '../services/pet_service.dart';
+import '../services/user_service.dart';
+import '../services/image_service.dart';
+import '../widgets/image_picker_widget.dart';
+import 'dart:io';
 
 class PetProfileScreen extends StatefulWidget {
-  const PetProfileScreen({super.key});
+  final String? petId; // Optional petId for editing existing pets
+
+  const PetProfileScreen({super.key, this.petId});
 
   @override
   State<PetProfileScreen> createState() => _PetProfileScreenState();
 }
 
 class _PetProfileScreenState extends State<PetProfileScreen> {
+  // Services
+  final PetService _petService = PetService();
+  final UserService _userService = UserService();
+
   // Text controllers for form fields
   final TextEditingController _petNameController = TextEditingController();
   final TextEditingController _homeLocationController = TextEditingController();
@@ -24,7 +36,16 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
   String? _selectedPetType;
   String? _selectedBreed;
   String? _selectedColor;
-  int _bottomNavIndex = 4; // Profile is selected
+  String? _selectedGender;
+  int _bottomNavIndex = 3; // Profile is selected (index 3, not 4)
+
+  // Image & saving state
+  final ImagePicker _picker = ImagePicker();
+  final ImageService _imageService = ImageService();
+  File? _selectedImage;
+  bool _isSaving = false;
+  bool _isLoading = false;
+  Map<String, dynamic>? _existingPetData;
 
   // --- Style Constants ---
   static const Color bgColor = Color(0xFFFCFAF8);
@@ -34,6 +55,47 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
   static const Color primaryButtonColor = Color(0xFFF2870C);
   static const Color borderColor = Color(0xFFF4EEE7);
   static const Color dashedBorderColor = Color(0xFFE8DCCE);
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.petId != null) {
+      _loadExistingPetData();
+    }
+  }
+
+  Future<void> _loadExistingPetData() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      // Fetch pet data from backend
+      final pets = await _petService.fetchPets();
+      final pet = pets.firstWhere(
+        (p) => p['_id'] == widget.petId,
+        orElse: () => {},
+      );
+
+      if (pet.isNotEmpty) {
+        setState(() {
+          _existingPetData = pet;
+          _petNameController.text = pet['petName'] ?? '';
+          _homeLocationController.text = pet['homeLocation'] ?? '';
+          _selectedPetType = pet['petType'];
+          _selectedBreed = pet['breed'];
+          _selectedColor = pet['color'];
+          _selectedGender = pet['gender'];
+        });
+      }
+    } catch (e) {
+      print('Error loading pet data: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   void _onNavigationTap(int index) {
     setState(() {
@@ -62,7 +124,7 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => const PostFindtPetScreen(),
+            builder: (context) => const PostFoundPetScreen(),
           ),
         );
         break;
@@ -108,7 +170,7 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
             },
           ),
           title: Text(
-            'Pet Profile',
+            widget.petId != null ? 'Edit Pet Profile' : 'Add New Pet',
             style: textTheme.titleLarge?.copyWith(
               color: primaryTextColor,
               fontWeight: FontWeight.bold,
@@ -117,182 +179,227 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
           centerTitle: true,
           actions: const [SizedBox(width: 56)],
         ),
-        body: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16),
-
-                // Pet Profile Image Section
-                Center(
+        body: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFF1C150D),
+                ),
+              )
+            : SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: inputBgColor,
-                          border: Border.all(color: borderColor, width: 2),
-                        ),
-                        child: ClipOval(
-                          child: Stack(
-                            children: [
-                              // Placeholder pet image
-                              Container(
-                                width: double.infinity,
-                                height: double.infinity,
+                      const SizedBox(height: 16),
+
+                      // Pet Profile Image Section
+                      Center(
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 120,
+                              height: 120,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
                                 color: inputBgColor,
-                                child: const Icon(
-                                  Icons.pets,
-                                  size: 48,
-                                  color: secondaryTextColor,
+                                border:
+                                    Border.all(color: borderColor, width: 2),
+                              ),
+                              child: ClipOval(
+                                child: Stack(
+                                  children: [
+                                    // Placeholder or selected pet image
+                                    _selectedImage == null
+                                        ? Container(
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                            color: inputBgColor,
+                                            child: const Icon(
+                                              Icons.pets,
+                                              size: 48,
+                                              color: secondaryTextColor,
+                                            ),
+                                          )
+                                        : Image.file(
+                                            File(_selectedImage!.path),
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                            fit: BoxFit.cover,
+                                          ),
+                                    // Camera overlay
+                                    Positioned(
+                                      bottom: 0,
+                                      right: 0,
+                                      child: Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: const BoxDecoration(
+                                          color: primaryButtonColor,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.camera_alt,
+                                          size: 20,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              // Camera overlay
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: const BoxDecoration(
-                                    color: primaryButtonColor,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.camera_alt,
-                                    size: 20,
-                                    color: Colors.white,
-                                  ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextButton(
+                              onPressed: () async {
+                                final File? picked =
+                                    await _imageService.pickImageFromGallery();
+                                if (picked != null) {
+                                  setState(() {
+                                    _selectedImage = picked;
+                                  });
+                                }
+                              },
+                              child: Text(
+                                'Change Photo',
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: primaryButtonColor,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      TextButton(
-                        onPressed: () {
-                          // TODO: Implement image picker
+
+                      const SizedBox(height: 24),
+
+                      // Pet Information Section
+                      Text(
+                        'Pet Information',
+                        style: textTheme.titleLarge?.copyWith(
+                          color: primaryTextColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Form Fields
+                      _buildTextField(
+                        label: 'Pet Name',
+                        hint: 'Enter your pet\'s name',
+                        controller: _petNameController,
+                      ),
+
+                      _buildDropdownField(
+                        label: 'Pet Type',
+                        hint: 'Select pet type',
+                        value: _selectedPetType,
+                        items: [
+                          'Dog',
+                          'Cat',
+                          'Rabbit',
+                          'Hamster',
+                          'Guinea Pig',
+                          'Bird',
+                          'Other',
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedPetType = value;
+                            // Reset breed when pet type changes
+                            _selectedBreed = null;
+                          });
                         },
-                        child: Text(
-                          'Change Photo',
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: primaryButtonColor,
-                            fontWeight: FontWeight.w500,
+                      ),
+
+                      _buildDropdownField(
+                        label: 'Breed',
+                        hint: 'Select breed',
+                        value: _selectedBreed,
+                        items: _getBreedOptions(),
+                        onChanged: (value) =>
+                            setState(() => _selectedBreed = value),
+                      ),
+
+                      _buildDropdownField(
+                        label: 'Gender',
+                        hint: 'Select Gender',
+                        value: _selectedGender,
+                        items: ['Male', 'Female'],
+                        onChanged: (value) =>
+                            setState(() => _selectedGender = value),
+                      ),
+
+                      _buildDropdownField(
+                        label: 'Color',
+                        hint: 'Select primary color',
+                        value: _selectedColor,
+                        items: [
+                          'Black',
+                          'White',
+                          'Brown',
+                          'Golden',
+                          'Gray',
+                          'Orange',
+                          'Cream',
+                          'Multi-colored',
+                          'Other',
+                        ],
+                        onChanged: (value) =>
+                            setState(() => _selectedColor = value),
+                      ),
+
+                      _buildTextField(
+                        label: 'Default Home Location',
+                        hint: 'Enter your home address',
+                        controller: _homeLocationController,
+                      ),
+                      _buildPhotoUploader(),
+
+                      const SizedBox(height: 32),
+
+                      // Save Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _isSaving
+                              ? null
+                              : () {
+                                  _savePetProfile();
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryButtonColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12.0),
+                            ),
+                            textStyle: textTheme.bodyLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
+                          child: _isSaving
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
+                                  ),
+                                )
+                              : Text(widget.petId != null
+                                  ? 'Update Pet'
+                                  : 'Add My Pet'),
                         ),
                       ),
+
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
-
-                const SizedBox(height: 24),
-
-                // Pet Information Section
-                Text(
-                  'Pet Information',
-                  style: textTheme.titleLarge?.copyWith(
-                    color: primaryTextColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Form Fields
-                _buildTextField(
-                  label: 'Pet Name',
-                  hint: 'Enter your pet\'s name',
-                  controller: _petNameController,
-                ),
-
-                _buildDropdownField(
-                  label: 'Pet Type',
-                  hint: 'Select pet type',
-                  value: _selectedPetType,
-                  items: [
-                    'Dog',
-                    'Cat',
-                    'Rabbit',
-                    'Hamster',
-                    'Guinea Pig',
-                    'Bird',
-                    'Other',
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedPetType = value;
-                      // Reset breed when pet type changes
-                      _selectedBreed = null;
-                    });
-                  },
-                ),
-
-                _buildDropdownField(
-                  label: 'Breed',
-                  hint: 'Select breed',
-                  value: _selectedBreed,
-                  items: _getBreedOptions(),
-                  onChanged: (value) => setState(() => _selectedBreed = value),
-                ),
-
-                _buildDropdownField(
-                  label: 'Color',
-                  hint: 'Select primary color',
-                  value: _selectedColor,
-                  items: [
-                    'Black',
-                    'White',
-                    'Brown',
-                    'Golden',
-                    'Gray',
-                    'Orange',
-                    'Cream',
-                    'Multi-colored',
-                    'Other',
-                  ],
-                  onChanged: (value) => setState(() => _selectedColor = value),
-                ),
-
-                _buildTextField(
-                  label: 'Default Home Location',
-                  hint: 'Enter your home address',
-                  controller: _homeLocationController,
-                ),
-                _buildPhotoUploader(),
-
-                const SizedBox(height: 32),
-
-                // Save Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      _savePetProfile();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryButtonColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12.0),
-                      ),
-                      textStyle: textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    child: const Text('Add My Pet'),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        ),
+              ),
         bottomNavigationBar: Container(
           decoration: const BoxDecoration(
             color: bgColor,
@@ -365,22 +472,15 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
               style: TextStyle(color: primaryTextColor, fontSize: 14),
             ),
             const SizedBox(height: 16),
-            TextButton(
-              onPressed: () {
-                // TODO: Implement image picking logic
+            ImagePickerWidget(
+              onImageSelected: (File image) {
+                setState(() {
+                  _selectedImage = image;
+                });
               },
-              style: TextButton.styleFrom(
-                backgroundColor: inputBgColor,
-                foregroundColor: primaryTextColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
-              child: const Text(
-                'Upload',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+              title: 'Upload Photo',
+              subtitle: 'Add a photo of your pet',
+              allowMultiple: false,
             ),
           ],
         ),
@@ -471,8 +571,65 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
       return;
     }
 
-    // TODO: Implement actual save logic (database, API, etc.)
-    _showSuccessSnackBar('Pet profile saved successfully!');
+    if (_selectedGender == null) {
+      _showErrorSnackBar('Please select a gender');
+      return;
+    }
+
+    _submitToBackend();
+  }
+
+  Future<void> _submitToBackend() async {
+    setState(() {
+      _isSaving = true;
+    });
+    try {
+      final ownerId = await _userService.getUserId();
+      if (ownerId == null) {
+        _showErrorSnackBar('Please login first');
+        return;
+      }
+
+      if (widget.petId != null && _existingPetData != null) {
+        // Update existing pet
+        await _petService.updatePet(
+          petId: widget.petId!,
+          petName: _petNameController.text.trim(),
+          petType: _selectedPetType!,
+          breed: _selectedBreed ?? 'Mixed Breed',
+          gender: _selectedGender!,
+          color: _selectedColor ?? 'Other',
+          homeLocation: _homeLocationController.text.trim(),
+          ownerId: ownerId,
+          profileImageFile:
+              _selectedImage != null ? File(_selectedImage!.path) : null,
+        );
+        _showSuccessSnackBar('Pet profile updated successfully!');
+      } else {
+        // Create new pet
+        await _petService.createPet(
+          petName: _petNameController.text.trim(),
+          petType: _selectedPetType!,
+          breed: _selectedBreed ?? 'Mixed Breed',
+          gender: _selectedGender!,
+          color: _selectedColor ?? 'Other',
+          homeLocation: _homeLocationController.text.trim(),
+          ownerId: ownerId,
+          profileImageFile:
+              _selectedImage != null ? File(_selectedImage!.path) : null,
+        );
+        _showSuccessSnackBar('Pet profile created successfully!');
+      }
+
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      _showErrorSnackBar('Failed to save: $e');
+    } finally {
+      if (mounted)
+        setState(() {
+          _isSaving = false;
+        });
+    }
   }
 
   void _showErrorSnackBar(String message) {
@@ -611,13 +768,13 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
                     borderRadius: BorderRadius.circular(12.0),
                     border: Border.all(
                       color: value != null
-                          ? primaryButtonColor.withOpacity(0.2)
+                          ? primaryButtonColor.withValues(alpha: 0.2)
                           : Colors.transparent,
                       width: 1,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
+                        color: Colors.black.withValues(alpha: 0.02),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -645,7 +802,7 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
                     decoration: InputDecoration(
                       hintText: hint,
                       hintStyle: TextStyle(
-                        color: secondaryTextColor.withOpacity(0.7),
+                        color: secondaryTextColor.withValues(alpha: 0.7),
                         fontSize: 16,
                         fontWeight: FontWeight.w400,
                       ),
@@ -672,8 +829,8 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color: value != null
-                            ? primaryButtonColor.withOpacity(0.15)
-                            : secondaryTextColor.withOpacity(0.1),
+                            ? primaryButtonColor.withValues(alpha: 0.15)
+                            : secondaryTextColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(

@@ -24,6 +24,15 @@ const petSchema = new mongoose.Schema({
     trim: true,
     maxlength: [100, 'Breed name cannot exceed 100 characters']
   },
+
+  gender: {
+    type: String,
+    required: [true, 'Gender is required'],
+    enum:{
+      values: ['Male', 'Female'],
+      message: 'Please mention the gender'
+    }
+  },
   
   color: {
     type: String,

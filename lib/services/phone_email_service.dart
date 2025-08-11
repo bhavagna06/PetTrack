@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart';
 
 class PhoneEmailService {
   // Phone.Email API configuration
@@ -116,7 +115,7 @@ class PhoneEmailService {
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        jsonDecode(response.body); // Parse response but don't store unused data
         return {
           'success': true,
           'message': 'OTP verified successfully',

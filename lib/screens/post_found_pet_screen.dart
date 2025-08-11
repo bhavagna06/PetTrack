@@ -4,22 +4,33 @@ import 'package:dotted_border/dotted_border.dart';
 import 'home_screen.dart';
 import 'profile_screen.dart';
 import 'post_lost_pet_screen.dart'; // Added import for PostLostPetScreen
+import 'package:image_picker/image_picker.dart';
+import '../services/pet_service.dart';
+import '../services/session_service.dart';
+import 'dart:io';
 
-class PostFindtPetScreen extends StatefulWidget {
-  const PostFindtPetScreen({super.key});
+class PostFoundPetScreen extends StatefulWidget {
+  const PostFoundPetScreen({super.key});
 
   @override
-  State<PostFindtPetScreen> createState() => _PostFindtPetScreenState();
+  State<PostFoundPetScreen> createState() => _PostFoundPetScreenState();
 }
 
-class _PostFindtPetScreenState extends State<PostFindtPetScreen> {
+class _PostFoundPetScreenState extends State<PostFoundPetScreen> {
   // State variables for dropdowns and navigation
   String? _selectedPetType;
   String? _selectedBreed;
-  String? _selectedAge;
-  String? _selectedSize;
-  String? _selectedCollarColor;
+  String? _selectedColor;
+  String? _selectedGender;
   int _bottomNavIndex = 2; // 'Post Found' is initially selected
+  final ImagePicker _picker = ImagePicker();
+  final List<XFile> _pickedPhotos = [];
+  bool _isPosting = false;
+
+  // Form controllers
+  final TextEditingController _petNameController = TextEditingController();
+  final TextEditingController _foundLocationController =
+      TextEditingController();
 
   // --- Style Constants ---
   // Extracted from the CSS for easy reuse and maintenance
@@ -113,7 +124,11 @@ class _PostFindtPetScreenState extends State<PostFindtPetScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // --- Form Fields ---
-                _buildTextField(label: 'Pet Name', hint: 'Enter pet name'),
+                _buildTextField(
+                  label: 'Pet Name',
+                  hint: 'Enter pet name',
+                  controller: _petNameController,
+                ),
                 _buildDropdownField(
                   label: 'Pet Type',
                   hint: 'Select pet type',
@@ -129,31 +144,36 @@ class _PostFindtPetScreenState extends State<PostFindtPetScreen> {
                   items: ['Golden Retriever', 'Poodle', 'Siamese', 'Other'],
                   onChanged: (value) => setState(() => _selectedBreed = value),
                 ),
+
                 _buildDropdownField(
-                  label: 'Age',
-                  hint: 'Select age',
-                  value: _selectedAge,
-                  items: ['Puppy', 'Adult', 'Senior'],
-                  onChanged: (value) => setState(() => _selectedAge = value),
+                  label: 'Gender',
+                  hint: 'Select Gender',
+                  value: _selectedGender,
+                  items: ['Male', 'Female'],
+                  onChanged: (value) => setState(() => _selectedGender = value),
                 ),
+
                 _buildDropdownField(
-                  label: 'Size',
-                  hint: 'Select size',
-                  value: _selectedSize,
-                  items: ['Small', 'Medium', 'Large'],
-                  onChanged: (value) => setState(() => _selectedSize = value),
-                ),
-                _buildDropdownField(
-                  label: 'Collar Color',
+                  label: 'Color',
                   hint: 'Select collar color',
-                  value: _selectedCollarColor,
-                  items: ['Red', 'Blue', 'Black', 'None'],
-                  onChanged: (value) =>
-                      setState(() => _selectedCollarColor = value),
+                  value: _selectedColor,
+                  items: [
+                    'Black',
+                    'White',
+                    'Brown',
+                    'Golden',
+                    'Gray',
+                    'Orange',
+                    'Cream',
+                    'Multi-colored',
+                    'Other'
+                  ],
+                  onChanged: (value) => setState(() => _selectedColor = value),
                 ),
                 _buildTextField(
                   label: 'Found Location',
                   hint: 'Enter where you found the pet',
+                  controller: _foundLocationController,
                 ),
 
                 // --- Photo Upload Section ---
@@ -174,9 +194,7 @@ class _PostFindtPetScreenState extends State<PostFindtPetScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      // TODO: Implement post logic
-                    },
+                    onPressed: _isPosting ? null : _postFoundPet,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryButtonColor,
                       foregroundColor: primaryTextColor,
@@ -188,7 +206,13 @@ class _PostFindtPetScreenState extends State<PostFindtPetScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    child: const Text('Report Found Pet'),
+                    child: _isPosting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Report Found Pet'),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -242,7 +266,11 @@ class _PostFindtPetScreenState extends State<PostFindtPetScreen> {
   }
 
   // A reusable widget for text fields to avoid code duplication
-  Widget _buildTextField({required String label, required String hint}) {
+  Widget _buildTextField({
+    required String label,
+    required String hint,
+    TextEditingController? controller,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Column(
@@ -258,6 +286,7 @@ class _PostFindtPetScreenState extends State<PostFindtPetScreen> {
           ),
           const SizedBox(height: 8),
           TextFormField(
+            controller: controller,
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: const TextStyle(
@@ -282,7 +311,7 @@ class _PostFindtPetScreenState extends State<PostFindtPetScreen> {
     );
   }
 
-  // A reusable widget for dropdowns
+  // Updated modern card-style dropdown field widget
   Widget _buildDropdownField({
     required String label,
     required String hint,
@@ -291,47 +320,162 @@ class _PostFindtPetScreenState extends State<PostFindtPetScreen> {
     required ValueChanged<String?> onChanged,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: primaryTextColor,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        child: Card(
+          elevation: value != null ? 4 : 2,
+          shadowColor: value != null
+              ? primaryButtonColor.withValues(alpha: 0.2)
+              : Colors.black.withValues(alpha: 0.08),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.0),
+          ),
+          color: Colors.white,
+          margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+          child: Container(
+            padding: const EdgeInsets.all(20.0),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16.0),
+              border: Border.all(
+                color: value != null
+                    ? primaryButtonColor.withValues(alpha: 0.3)
+                    : borderColor.withValues(alpha: 0.5),
+                width: value != null ? 2.0 : 1.0,
+              ),
+              gradient: value != null
+                  ? LinearGradient(
+                      colors: [
+                        Colors.white,
+                        primaryButtonColor.withValues(alpha: 0.02),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (value != null)
+                      Container(
+                        width: 4,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: primaryButtonColor,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        margin: const EdgeInsets.only(right: 8),
+                      ),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: value != null
+                            ? primaryButtonColor
+                            : primaryTextColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: inputBgColor,
+                    borderRadius: BorderRadius.circular(12.0),
+                    border: Border.all(
+                      color: value != null
+                          ? primaryButtonColor.withValues(alpha: 0.2)
+                          : Colors.transparent,
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.02),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: DropdownButtonFormField<String>(
+                    value: value,
+                    items: items.map((String item) {
+                      return DropdownMenuItem<String>(
+                        value: item,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Text(
+                            item,
+                            style: const TextStyle(
+                              color: primaryTextColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: onChanged,
+                    decoration: InputDecoration(
+                      hintText: hint,
+                      hintStyle: TextStyle(
+                        color: secondaryTextColor.withValues(alpha: 0.7),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      filled: true,
+                      fillColor: Colors.transparent,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                    ),
+                    icon: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: value != null
+                            ? primaryButtonColor.withValues(alpha: 0.15)
+                            : secondaryTextColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: value != null
+                            ? primaryButtonColor
+                            : secondaryTextColor,
+                        size: 20,
+                      ),
+                    ),
+                    style: const TextStyle(
+                      color: primaryTextColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    dropdownColor: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    menuMaxHeight: 240,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            value: value,
-            items: items.map((String item) {
-              return DropdownMenuItem<String>(value: item, child: Text(item));
-            }).toList(),
-            onChanged: onChanged,
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: const TextStyle(
-                color: secondaryTextColor,
-                fontSize: 16,
-              ),
-              filled: true,
-              fillColor: inputBgColor,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.0),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
-            ),
-            icon: const Icon(Icons.unfold_more, color: secondaryTextColor),
-            style: const TextStyle(color: primaryTextColor, fontSize: 16),
-            dropdownColor: inputBgColor,
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -365,8 +509,15 @@ class _PostFindtPetScreenState extends State<PostFindtPetScreen> {
             ),
             const SizedBox(height: 16),
             TextButton(
-              onPressed: () {
-                // TODO: Implement image picking logic
+              onPressed: () async {
+                final photos = await _picker.pickMultiImage(imageQuality: 85);
+                if (photos.isNotEmpty) {
+                  setState(() {
+                    _pickedPhotos
+                      ..clear()
+                      ..addAll(photos);
+                  });
+                }
               },
               style: TextButton.styleFrom(
                 backgroundColor: inputBgColor,
@@ -381,9 +532,84 @@ class _PostFindtPetScreenState extends State<PostFindtPetScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
+            if (_pickedPhotos.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _pickedPhotos
+                    .map((x) => ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(
+                            File(x.path),
+                            width: 64,
+                            height: 64,
+                            fit: BoxFit.cover,
+                          ),
+                        ))
+                    .toList(),
+              )
+            ]
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _postFoundPet() async {
+    if (_selectedPetType == null ||
+        _selectedBreed == null ||
+        _selectedGender == null ||
+        _petNameController.text.trim().isEmpty ||
+        _foundLocationController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Please complete all required fields'),
+          backgroundColor: Colors.red));
+      return;
+    }
+    setState(() => _isPosting = true);
+    try {
+      final ownerId = await SessionService().getBackendUserId();
+      if (ownerId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Please login first'), backgroundColor: Colors.red));
+        return;
+      }
+      final petService = PetService();
+      final created = await petService.createPet(
+        petName: _petNameController.text.trim(),
+        petType: _selectedPetType!,
+        breed: _selectedBreed!,
+        gender: _selectedGender!,
+        color: _selectedColor ?? 'Other',
+        homeLocation: _foundLocationController.text.trim(),
+        ownerId: ownerId,
+      );
+      final petId = (created['data'] as Map)['_id'] as String;
+      if (_pickedPhotos.isNotEmpty) {
+        await petService.uploadAdditionalPhotos(
+          petId: petId,
+          files: _pickedPhotos.map((x) => File(x.path)).toList(),
+        );
+      }
+      // Mark as found
+      await petService.markFound(petId);
+      if (mounted) Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Found pet reported successfully'),
+          backgroundColor: Colors.green));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _isPosting = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _petNameController.dispose();
+    _foundLocationController.dispose();
+    super.dispose();
   }
 }

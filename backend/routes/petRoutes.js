@@ -36,6 +36,10 @@ const validatePetData = [
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage('Breed must be between 1 and 100 characters'),
+
+  body('gender')
+    .isIn(['Male', 'Female'])
+    .withMessage('Please select a valid gender'),
   
   body('color')
     .isIn(['Black', 'White', 'Brown', 'Golden', 'Gray', 'Orange', 'Cream', 'Multi-colored', 'Other'])
@@ -73,6 +77,7 @@ router.post('/', upload.single('profileImage'), validatePetData, handleValidatio
       petName,
       petType,
       breed,
+      gender,
       color,
       homeLocation,
       ownerId
@@ -83,6 +88,7 @@ router.post('/', upload.single('profileImage'), validatePetData, handleValidatio
       petName,
       petType,
       breed,
+      gender,
       color,
       homeLocation,
       ownerId
@@ -215,6 +221,7 @@ router.put('/:id', upload.single('profileImage'), validatePetData, handleValidat
       petName,
       petType,
       breed,
+      gender,
       color,
       homeLocation,
       ownerId
@@ -236,6 +243,7 @@ router.put('/:id', upload.single('profileImage'), validatePetData, handleValidat
     pet.petName = petName;
     pet.petType = petType;
     pet.breed = breed;
+    pet.gender = gender;
     pet.color = color;
     pet.homeLocation = homeLocation;
     pet.ownerId = ownerId;

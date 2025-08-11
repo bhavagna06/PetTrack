@@ -1,12 +1,11 @@
 // this screen is used to authenticate the user ie to login or sign up
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
-import '../widgets/google_sign_in_button.dart';
-import '../theme/app_theme.dart';
+// Removed unused imports
 import 'home_screen.dart';
+// Session is stored via AuthService on success
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -664,6 +663,7 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
 
         if (result['success']) {
           if (mounted) {
+            // Ensure backend session is stored (already stored in service), then navigate
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(

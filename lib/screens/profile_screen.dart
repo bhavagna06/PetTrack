@@ -489,76 +489,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
 
                             // Notifications item
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF4EEE7),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Icon(
-                                      Icons.notifications_outlined,
-                                      color: Color(0xFF1C150D),
-                                      size: 24,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  const Expanded(
-                                    child: Text(
-                                      'Notifications',
-                                      style: TextStyle(
-                                        color: Color(0xFF1C150D),
-                                        fontSize: 16,
-                                        fontFamily: 'Plus Jakarta Sans',
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            // Container(
+                            //   padding: const EdgeInsets.symmetric(
+                            //     horizontal: 16,
+                            //     vertical: 8,
+                            //   ),
+                            //   child: Row(
+                            //     children: [
+                            //       Container(
+                            //         width: 40,
+                            //         height: 40,
+                            //         decoration: BoxDecoration(
+                            //           color: const Color(0xFFF4EEE7),
+                            //           borderRadius: BorderRadius.circular(8),
+                            //         ),
+                            //         child: const Icon(
+                            //           Icons.notifications_outlined,
+                            //           color: Color(0xFF1C150D),
+                            //           size: 24,
+                            //         ),
+                            //       ),
+                            //       const SizedBox(width: 16),
+                            //       const Expanded(
+                            //         child: Text(
+                            //           'Notifications',
+                            //           style: TextStyle(
+                            //             color: Color(0xFF1C150D),
+                            //             fontSize: 16,
+                            //             fontFamily: 'Plus Jakarta Sans',
+                            //           ),
+                            //         ),
+                            //       ),
+                            //     ],
+                            //   ),
+                            // ),
 
                             // Privacy item
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFF4EEE7),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Icon(
-                                      Icons.shield_outlined,
-                                      color: Color(0xFF1C150D),
-                                      size: 24,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  const Expanded(
-                                    child: Text(
-                                      'Privacy',
-                                      style: TextStyle(
-                                        color: Color(0xFF1C150D),
-                                        fontSize: 16,
-                                        fontFamily: 'Plus Jakarta Sans',
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            // Container(
+                            //   padding: const EdgeInsets.symmetric(
+                            //     horizontal: 16,
+                            //     vertical: 8,
+                            //   ),
+                            //   child: Row(
+                            //     children: [
+                            //       Container(
+                            //         width: 40,
+                            //         height: 40,
+                            //         decoration: BoxDecoration(
+                            //           color: const Color(0xFFF4EEE7),
+                            //           borderRadius: BorderRadius.circular(8),
+                            //         ),
+                            //         child: const Icon(
+                            //           Icons.shield_outlined,
+                            //           color: Color(0xFF1C150D),
+                            //           size: 24,
+                            //         ),
+                            //       ),
+                            //       const SizedBox(width: 16),
+                            //       const Expanded(
+                            //         child: Text(
+                            //           'Privacy',
+                            //           style: TextStyle(
+                            //             color: Color(0xFF1C150D),
+                            //             fontSize: 16,
+                            //             fontFamily: 'Plus Jakarta Sans',
+                            //           ),
+                            //         ),
+                            //       ),
+                            //     ],
+                            //   ),
+                            // ),
 
                             SwitchListTile(
                               title: const Text(

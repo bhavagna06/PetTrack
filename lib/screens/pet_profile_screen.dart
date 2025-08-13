@@ -471,7 +471,7 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
             ),
             const SizedBox(height: 16),
             ImagePickerWidget(
-              onImageSelected: (File image) {
+              onImageSelected: (dynamic image) {
                 setState(() {
                   _selectedImage = image;
                 });
@@ -582,9 +582,20 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
       _isSaving = true;
     });
     try {
-      final ownerId = await _userService.getUserId();
-      if (ownerId == null) {
+      // Check if user has a valid backend session
+      final hasValidSession = await _userService.hasValidBackendSession();
+
+      if (!hasValidSession) {
         _showErrorSnackBar('Please login first');
+        return;
+      }
+
+      String? ownerId = await _userService.getUserId();
+      print('PetProfileScreen: Using ownerId: $ownerId');
+
+      if (ownerId == null) {
+        _showErrorSnackBar(
+            'Unable to get user ID. Please try logging in again.');
         return;
       }
 

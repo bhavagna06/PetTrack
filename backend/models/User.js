@@ -38,9 +38,10 @@ const userSchema = new mongoose.Schema({
     required: function() {
       return this.authProvider === 'phone' || this.authProvider === 'email';
     },
-    unique: true,
+    unique: false, // Remove unique constraint to allow Google users without phone
     sparse: true, // Allow null values for Google users
-    trim: true
+    trim: true,
+    default: undefined // Don't set default value for Google users
   },
   
   password: {
@@ -119,8 +120,9 @@ const userSchema = new mongoose.Schema({
 
 // Index for better query performance
 userSchema.index({ email: 1 });
-userSchema.index({ phone: 1 });
+userSchema.index({ phone: 1 }, { sparse: true }); // Make phone index sparse to allow null values
 userSchema.index({ isActive: 1 });
+userSchema.index({ firebaseUid: 1 }, { sparse: true }); // Add sparse index for firebaseUid
 
 // Virtual for full address
 userSchema.virtual('fullAddress').get(function() {

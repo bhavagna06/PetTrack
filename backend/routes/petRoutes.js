@@ -1,25 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Pet = require('../models/Pet');
-const { body, validationResult } = require('express-validator');
-const multer = require('multer');
+const { body } = require('express-validator');
 const { firebaseStorage } = require('../config/firebase');
-
-// Configure multer for memory storage (for Firebase upload)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024 // 5MB limit
-  },
-  fileFilter: function (req, file, cb) {
-    // Accept only images
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed!'), false);
-    }
-  }
-});
+const { upload, handleValidationErrors } = require('../utils/middleware');
 
 // Validation middleware
 const validatePetData = [
@@ -55,18 +40,7 @@ const validatePetData = [
     .withMessage('Valid owner ID is required')
 ];
 
-// Helper function to handle validation errors
-const handleValidationErrors = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      errors: errors.array()
-    });
-  }
-  next();
-};
+
 
 // @route   POST /api/pets
 // @desc    Create a new pet profile
@@ -148,7 +122,15 @@ router.get('/', async (req, res) => {
     // Build filter object
     const filter = { isActive: true };
     
-    if (ownerId) filter.ownerId = ownerId;
+    // Validate ownerId is a valid MongoDB ObjectId before adding to filter
+    if (ownerId) {
+      if (mongoose.Types.ObjectId.isValid(ownerId)) {
+        filter.ownerId = ownerId;
+      } else {
+        console.log('Invalid ownerId format, skipping ownerId filter:', ownerId);
+        // Don't add invalid ownerId to filter - this allows public access
+      }
+    }
     if (petType) filter.petType = petType;
     if (isLost !== undefined) filter.isLost = isLost === 'true';
     if (isFound !== undefined) filter.isFound = isFound === 'true';

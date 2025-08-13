@@ -75,8 +75,10 @@ app.use('*', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server is running on port ${PORT}`);
   console.log(`📱 PetTrack Backend API: http://localhost:${PORT}`);
+  console.log(`🌐 Network Access: http://0.0.0.0:${PORT}`);
   console.log(`🔍 Health Check: http://localhost:${PORT}/health`);
+  console.log(`📱 For physical device testing, use your computer's IP address`);
 }); 

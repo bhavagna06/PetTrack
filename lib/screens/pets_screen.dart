@@ -38,11 +38,24 @@ class _PetsScreenState extends State<PetsScreen> {
         _errorMessage = null;
       });
 
-      final userId = await _userService.getUserId();
-      if (userId == null) {
+      // Check if user has a valid backend session
+      final hasValidSession = await _userService.hasValidBackendSession();
+      
+      if (!hasValidSession) {
         setState(() {
           _isLoading = false;
           _errorMessage = 'Please log in to view your pets';
+        });
+        return;
+      }
+
+      String? userId = await _userService.getUserId();
+      print('PetsScreen: Using userId: $userId');
+      
+      if (userId == null) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Unable to get user ID. Please try logging in again.';
         });
         return;
       }

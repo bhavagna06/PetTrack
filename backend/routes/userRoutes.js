@@ -1,25 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { body, validationResult } = require('express-validator');
-const multer = require('multer');
+const { body } = require('express-validator');
 const { firebaseStorage } = require('../config/firebase');
-
-// Configure multer for memory storage (for Firebase upload)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024 // 5MB limit
-  },
-  fileFilter: function (req, file, cb) {
-    // Accept only images
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed!'), false);
-    }
-  }
-});
+const { upload, handleValidationErrors } = require('../utils/middleware');
 
 // Validation middleware for user registration
 const validateUserRegistration = [
@@ -64,18 +48,7 @@ const validateUserUpdate = [
     .withMessage('Phone number must be between 10 and 15 characters')
 ];
 
-// Helper function to handle validation errors
-const handleValidationErrors = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      errors: errors.array()
-    });
-  }
-  next();
-};
+
 
 // @route   POST /api/users/google-auth
 // @desc    Authenticate or create user with Google
@@ -96,6 +69,8 @@ router.post('/google-auth', async (req, res) => {
       });
     }
 
+    console.log('Google auth request:', { firebaseUid, email, name });
+
     // Check if user already exists with this Firebase UID
     let user = await User.findOne({ firebaseUid });
 
@@ -105,18 +80,24 @@ router.post('/google-auth', async (req, res) => {
 
       if (user) {
         // User exists with email but no Firebase UID, update it
+        console.log('Updating existing user with Firebase UID');
         user.firebaseUid = firebaseUid;
+        user.authProvider = 'google';
         if (name && !user.name) user.name = name;
         if (profileImage && !user.profileImage) user.profileImage = profileImage;
+        user.isEmailVerified = true;
         await user.save();
       } else {
         // Create new user
+        console.log('Creating new Google user');
         const userData = {
           firebaseUid,
           email: email.toLowerCase(),
           name: name || 'Google User',
           authProvider: 'google',
-          isEmailVerified: true
+          isEmailVerified: true,
+          // Explicitly set phone to undefined for Google users
+          phone: undefined
         };
 
         if (profileImage) {
@@ -128,6 +109,7 @@ router.post('/google-auth', async (req, res) => {
       }
     } else {
       // User exists, update profile if needed
+      console.log('Updating existing Google user profile');
       let updated = false;
       if (name && user.name !== name) {
         user.name = name;
@@ -146,6 +128,14 @@ router.post('/google-auth', async (req, res) => {
     const userResponse = user.toObject();
     delete userResponse.password;
 
+    console.log('Google auth successful for user:', {
+      _id: userResponse._id,
+      email: userResponse.email,
+      name: userResponse.name,
+      firebaseUid: userResponse.firebaseUid,
+      authProvider: userResponse.authProvider
+    });
+
     res.status(200).json({
       success: true,
       message: 'Google authentication successful',
@@ -154,6 +144,22 @@ router.post('/google-auth', async (req, res) => {
 
   } catch (error) {
     console.error('Google auth error:', error);
+    
+    // Provide more specific error messages
+    if (error.code === 11000) {
+      console.error('Duplicate key error details:', {
+        keyPattern: error.keyPattern,
+        keyValue: error.keyValue
+      });
+      
+      if (error.keyPattern && error.keyPattern.phone) {
+        return res.status(400).json({
+          success: false,
+          message: 'Database index issue detected. Please contact support.'
+        });
+      }
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Internal server error during Google authentication'

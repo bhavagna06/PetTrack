@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'phone_utils.dart';
 
 class PhoneEmailService {
   // Phone.Email API configuration
@@ -9,38 +10,12 @@ class PhoneEmailService {
 
   // Validate Indian phone number format
   bool isValidIndianPhoneNumber(String phoneNumber) {
-    // Remove any spaces, dashes, or other characters
-    String cleanNumber = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
-
-    // Indian phone number patterns:
-    // +91 9876543210 (with country code)
-    // 9876543210 (without country code, 10 digits)
-    // 09876543210 (with leading 0, 11 digits)
-
-    if (cleanNumber.startsWith('91') && cleanNumber.length == 12) {
-      return true;
-    } else if (cleanNumber.length == 10) {
-      return true;
-    } else if (cleanNumber.startsWith('0') && cleanNumber.length == 11) {
-      return true;
-    }
-
-    return false;
+    return PhoneUtils.isValidIndianPhoneNumber(phoneNumber);
   }
 
   // Format phone number to international format
   String formatPhoneNumber(String phoneNumber) {
-    String cleanNumber = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
-
-    if (cleanNumber.startsWith('91') && cleanNumber.length == 12) {
-      return '+$cleanNumber';
-    } else if (cleanNumber.length == 10) {
-      return '+91$cleanNumber';
-    } else if (cleanNumber.startsWith('0') && cleanNumber.length == 11) {
-      return '+91${cleanNumber.substring(1)}';
-    }
-
-    return phoneNumber;
+    return PhoneUtils.formatPhoneNumberForInternational(phoneNumber);
   }
 
   // Send OTP using Phone.Email

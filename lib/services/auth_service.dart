@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'session_service.dart';
+import 'phone_utils.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -20,10 +21,8 @@ class AuthService {
     if (kIsWeb) {
       return 'http://localhost:3000';
     } else {
-      // For mobile, use 10.0.2.2 for Android emulator or actual IP for device
-      return Platform.isAndroid
-          ? 'http://10.0.2.2:3000'
-          : 'http://localhost:3000';
+      // For mobile devices, use your computer's IP address
+      return 'http://${getPhysicalDeviceIP()}:3000';
     }
   }
 
@@ -34,62 +33,49 @@ class AuthService {
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   // Validate Indian phone number format
+
   bool isValidIndianPhoneNumber(String phoneNumber) {
-    // Remove any spaces, dashes, or other characters
-    String cleanNumber = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
-
-    // Indian phone number patterns:
-    // +91 9876543210 (with country code)
-    // 9876543210 (without country code, 10 digits)
-    // 09876543210 (with leading 0, 11 digits)
-
-    if (cleanNumber.startsWith('91') && cleanNumber.length == 12) {
-      // +91 followed by 10 digits
-      return true;
-    } else if (cleanNumber.length == 10) {
-      // 10 digits without country code
-      return true;
-    } else if (cleanNumber.startsWith('0') && cleanNumber.length == 11) {
-      // 0 followed by 10 digits
-      return true;
-    }
-
-    return false;
+    return PhoneUtils.isValidIndianPhoneNumber(phoneNumber);
   }
 
   // Format phone number to international format
   String formatPhoneNumber(String phoneNumber) {
-    String cleanNumber = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
-
-    // For backend API, we need to send the phone number without country code
-    // The backend validation expects 10-15 characters
-    if (cleanNumber.startsWith('91') && cleanNumber.length == 12) {
-      return cleanNumber.substring(2); // Remove 91 prefix
-    } else if (cleanNumber.length == 10) {
-      return cleanNumber; // Keep as is
-    } else if (cleanNumber.startsWith('0') && cleanNumber.length == 11) {
-      return cleanNumber.substring(1); // Remove leading 0
-    }
-
-    return cleanNumber; // Return cleaned number
+    return PhoneUtils.formatPhoneNumberForBackend(phoneNumber);
   }
 
   // Sign in with Google using unified approach
   Future<UserCredential?> signInWithGoogle() async {
     try {
+      print('AuthService: Starting Google sign-in process...');
+      print('AuthService: Current backend URL: $_backendUrl');
+
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
+        print('AuthService: Google sign-in was cancelled by user');
         return null;
       }
 
+      print('AuthService: Google user obtained: ${googleUser.email}');
       final userCredential = await _getCredentialFromGoogleAccount(googleUser);
+      print('AuthService: Firebase authentication successful');
 
       // After successful Firebase authentication, authenticate with backend
-      await _authenticateWithBackend(googleUser, userCredential.user!);
+      final backendSuccess =
+          await _authenticateWithBackend(googleUser, userCredential.user!);
+
+      if (!backendSuccess) {
+        print(
+            'AuthService: WARNING - Backend authentication failed, but Firebase auth succeeded');
+        // Try to recover the session later
+        print('AuthService: Will attempt session recovery on next operation');
+      } else {
+        print('AuthService: Backend authentication successful');
+      }
 
       return userCredential;
     } catch (e) {
       print('AuthService: Google sign-in error: $e');
+      print('AuthService: Error type: ${e.runtimeType}');
       rethrow;
     }
   }
@@ -110,38 +96,60 @@ class AuthService {
   }
 
   // Helper method to authenticate with backend after Google sign-in
-  Future<void> _authenticateWithBackend(
+  Future<bool> _authenticateWithBackend(
       GoogleSignInAccount googleUser, User firebaseUser) async {
     try {
-      final response = await http.post(
-        Uri.parse('$_backendUrl/api/users/google-auth'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: json.encode({
-          'firebaseUid': firebaseUser.uid,
-          'email': googleUser.email,
-          'name': googleUser.displayName,
-          'profileImage': googleUser.photoUrl,
-        }),
-      );
+      print('AuthService: Attempting backend authentication for Google user');
+      print('AuthService: Backend URL: $_backendUrl');
+      print('AuthService: Firebase UID: ${firebaseUser.uid}');
+      print('AuthService: Google email: ${googleUser.email}');
+
+      final requestBody = {
+        'firebaseUid': firebaseUser.uid,
+        'email': googleUser.email,
+        'name': googleUser.displayName,
+        'profileImage': googleUser.photoUrl,
+      };
+
+      print('AuthService: Request body: $requestBody');
+
+      final response = await http
+          .post(
+            Uri.parse('$_backendUrl/api/users/google-auth'),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: json.encode(requestBody),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      print('AuthService: Backend response status: ${response.statusCode}');
+      print('AuthService: Backend response body: ${response.body}');
 
       final data = json.decode(response.body);
 
       if (response.statusCode == 200 && data['success']) {
+        print('AuthService: Backend authentication successful');
         // Store backend session locally
         try {
-          await SessionService()
-              .saveBackendUser((data['data'] as Map).cast<String, dynamic>());
+          final userData = (data['data'] as Map).cast<String, dynamic>();
+          await SessionService().saveBackendUser(userData);
+          print(
+              'AuthService: Backend session saved locally with user ID: ${userData['_id']}');
+          return true;
         } catch (e) {
-          print('Error saving backend session: $e');
+          print('AuthService: Error saving backend session: $e');
+          return false;
         }
       } else {
-        print('Backend Google auth failed: ${data['message']}');
+        print('AuthService: Backend Google auth failed: ${data['message']}');
+        return false;
       }
     } catch (e) {
-      print('Error authenticating with backend: $e');
+      print('AuthService: Error authenticating with backend: $e');
+      print('AuthService: Error type: ${e.runtimeType}');
       // Don't throw here as Firebase auth was successful
+      return false;
     }
   }
 
@@ -149,16 +157,24 @@ class AuthService {
   Future<Map<String, dynamic>> signInWithEmail(
       String email, String password) async {
     try {
-      final response = await http.post(
-        Uri.parse('$_backendUrl/api/users/login'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: json.encode({
-          'email': email.trim(),
-          'password': password,
-        }),
-      );
+      print('AuthService: Attempting email login for: ${email.trim()}');
+      print('AuthService: Backend URL: $_backendUrl');
+
+      final response = await http
+          .post(
+            Uri.parse('$_backendUrl/api/users/login'),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: json.encode({
+              'email': email.trim(),
+              'password': password,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+
+      print('AuthService: Email login response status: ${response.statusCode}');
+      print('AuthService: Email login response body: ${response.body}');
 
       final data = json.decode(response.body);
 
@@ -180,7 +196,8 @@ class AuthService {
         };
       }
     } catch (e) {
-      print('Email login error: $e');
+      print('AuthService: Email login error: $e');
+      print('AuthService: Error type: ${e.runtimeType}');
       return {
         'success': false,
         'message': 'Network error. Please check your connection.',
@@ -234,12 +251,14 @@ class AuthService {
   // Test backend connectivity
   Future<bool> testBackendConnection() async {
     try {
+      print('AuthService: Testing connection to $_backendUrl');
+
       final response = await http.get(
         Uri.parse('$_backendUrl/health'),
         headers: {
           'Content-Type': 'application/json',
         },
-      );
+      ).timeout(const Duration(seconds: 10));
 
       print('AuthService: Backend health check status: ${response.statusCode}');
       print('AuthService: Backend health check response: ${response.body}');
@@ -247,7 +266,37 @@ class AuthService {
       return response.statusCode == 200;
     } catch (e) {
       print('AuthService: Backend connection test failed: $e');
+      print('AuthService: Current backend URL: $_backendUrl');
       return false;
+    }
+  }
+
+  // Enhanced connection test with detailed logging
+  Future<Map<String, dynamic>> testConnectionWithDetails() async {
+    try {
+      print('AuthService: Testing connection to $_backendUrl');
+
+      final response = await http.get(
+        Uri.parse('$_backendUrl/health'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      return {
+        'success': response.statusCode == 200,
+        'statusCode': response.statusCode,
+        'response': response.body,
+        'url': _backendUrl,
+        'platform': Platform.isAndroid ? 'Android' : 'iOS',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': e.toString(),
+        'url': _backendUrl,
+        'platform': Platform.isAndroid ? 'Android' : 'iOS',
+      };
     }
   }
 
@@ -322,14 +371,19 @@ class AuthService {
   // Sign out from both Firebase and clear local data
   Future<void> signOut() async {
     try {
+      print('AuthService: Starting sign out process...');
       await _googleSignIn.signOut();
       await _auth.signOut();
       // Clear any local user data here
       try {
         await SessionService().clearBackendSession();
-      } catch (_) {}
+        print('AuthService: Backend session cleared');
+      } catch (e) {
+        print('AuthService: Error clearing backend session: $e');
+      }
+      print('AuthService: Sign out completed successfully');
     } catch (e) {
-      print('Sign out error: $e');
+      print('AuthService: Sign out error: $e');
     }
   }
 
@@ -472,17 +526,137 @@ class AuthService {
 
   // Check if phone number is a test number (for development)
   bool isTestPhoneNumber(String phoneNumber) {
-    String cleanNumber = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
-    // Common test numbers
-    return cleanNumber.contains('123456') ||
-        cleanNumber.contains('000000') ||
-        cleanNumber.contains('111111');
+    return PhoneUtils.isTestPhoneNumber(phoneNumber);
   }
 
   // Get test OTP for development
   String getTestOTP(String phoneNumber) {
-    // For development, return a fixed OTP
-    // In production, this should never be used
-    return '123456';
+    return PhoneUtils.getTestOTP(phoneNumber);
+  }
+
+  // Get current backend URL for debugging
+  String get currentBackendUrl => _backendUrl;
+
+  // Helper method to get your computer's IP address for physical device testing
+  static String getPhysicalDeviceIP() {
+    // Replace this with your computer's actual IP address
+    // You can find it by running 'ipconfig' on Windows
+    return '192.168.110.45'; // Your computer's IP address //phone ip address
+    // return '192.168.29.159'; // Your computer's IP address //phone ip address
+  }
+
+  // Simple method to test if the app can reach the backend
+  static Future<bool> canReachBackend() async {
+    try {
+      final url = 'http://${getPhysicalDeviceIP()}:3000/health';
+      print('Testing connection to: $url');
+
+      final response =
+          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+
+      print('Connection test result: ${response.statusCode}');
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Connection test failed: $e');
+      return false;
+    }
+  }
+
+  // Test Google authentication flow
+  static Future<Map<String, dynamic>> testGoogleAuthFlow() async {
+    final results = <String, dynamic>{};
+
+    try {
+      print('=== TESTING GOOGLE AUTH FLOW ===');
+
+      // Test 1: Check backend connectivity
+      final canConnect = await canReachBackend();
+      results['backendConnectivity'] = canConnect;
+
+      if (!canConnect) {
+        results['error'] = 'Backend not reachable';
+        return results;
+      }
+
+      // Test 2: Test Google auth endpoint directly
+      final testData = {
+        'firebaseUid': 'test-uid-123',
+        'email': 'test@example.com',
+        'name': 'Test User',
+        'profileImage': 'https://example.com/photo.jpg'
+      };
+
+      final response = await http
+          .post(
+            Uri.parse(
+                'http://${getPhysicalDeviceIP()}:3000/api/users/google-auth'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode(testData),
+          )
+          .timeout(const Duration(seconds: 10));
+
+      results['googleAuthEndpointStatus'] = response.statusCode;
+      results['googleAuthEndpointResponse'] = response.body;
+
+      print('Google auth endpoint test: ${response.statusCode}');
+      print('Response: ${response.body}');
+    } catch (e) {
+      results['error'] = e.toString();
+      print('Google auth flow test failed: $e');
+    }
+
+    print('=== END GOOGLE AUTH FLOW TEST ===');
+    return results;
+  }
+
+  // Comprehensive connection test with detailed diagnostics
+  static Future<Map<String, dynamic>> comprehensiveConnectionTest() async {
+    final results = <String, dynamic>{};
+
+    try {
+      // Test 1: Basic connectivity
+      final url = 'http://${getPhysicalDeviceIP()}:3000/health';
+      print('=== COMPREHENSIVE CONNECTION TEST ===');
+      print('Testing URL: $url');
+
+      final response =
+          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
+
+      results['statusCode'] = response.statusCode;
+      results['responseBody'] = response.body;
+      results['headers'] = response.headers;
+      results['success'] = response.statusCode == 200;
+
+      print('Response Status: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+      print('Response Headers: ${response.headers}');
+
+      // Test 2: Try a POST request to login endpoint
+      try {
+        final loginResponse = await http
+            .post(
+              Uri.parse('http://${getPhysicalDeviceIP()}:3000/api/users/login'),
+              headers: {'Content-Type': 'application/json'},
+              body: json.encode({'email': 'test@test.com', 'password': 'test'}),
+            )
+            .timeout(const Duration(seconds: 10));
+
+        results['loginEndpointStatus'] = loginResponse.statusCode;
+        results['loginEndpointBody'] = loginResponse.body;
+        print('Login endpoint test: ${loginResponse.statusCode}');
+      } catch (e) {
+        results['loginEndpointError'] = e.toString();
+        print('Login endpoint test failed: $e');
+      }
+    } catch (e) {
+      results['error'] = e.toString();
+      results['errorType'] = e.runtimeType.toString();
+      results['success'] = false;
+      print('Comprehensive test failed: $e');
+      print('Error type: ${e.runtimeType}');
+    }
+
+    print('=== END CONNECTION TEST ===');
+    return results;
   }
 }

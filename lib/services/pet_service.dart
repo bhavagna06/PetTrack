@@ -3,6 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'auth_service.dart';
+import 'session_service.dart';
+import 'user_service.dart';
 
 class PetService {
   // Select proper backend URL based on platform
@@ -10,9 +14,7 @@ class PetService {
     if (kIsWeb) {
       return 'http://localhost:3000';
     } else {
-      return Platform.isAndroid
-          ? 'http://10.0.2.2:3000'
-          : 'http://localhost:3000';
+      return 'http://${AuthService.getPhysicalDeviceIP()}:3000';
     }
   }
 
@@ -25,20 +27,55 @@ class PetService {
     int page = 1,
     int limit = 20,
   }) async {
+    // Only get ownerId from session if we're fetching user-specific pets
+    // Lost and found pets should be visible to everyone
+    String? finalOwnerId = ownerId;
+
+    // Only try to get ownerId from session if we're not fetching lost/found pets for public view
+    if (finalOwnerId == null && (isLost == null && isFound == null)) {
+      // First check if we have a valid backend session
+      final userService = UserService();
+      final hasValidSession = await userService.hasValidBackendSession();
+      
+      if (hasValidSession) {
+        finalOwnerId = await SessionService().getBackendUserId();
+        print('PetService: Using ownerId from valid session: $finalOwnerId');
+      } else {
+        print('PetService: No valid backend session found');
+      }
+    }
+
     final params = <String, String>{
       'page': page.toString(),
       'limit': limit.toString(),
     };
-    if (ownerId != null) params['ownerId'] = ownerId;
+    // Only add ownerId if it's a valid MongoDB ObjectId (24 hex characters)
+    if (finalOwnerId != null &&
+        finalOwnerId.length == 24 &&
+        RegExp(r'^[0-9a-fA-F]+$').hasMatch(finalOwnerId)) {
+      params['ownerId'] = finalOwnerId;
+    } else if (finalOwnerId != null) {
+      print('PetService: Invalid ownerId format, skipping: $finalOwnerId');
+    }
     if (petType != null) params['petType'] = petType;
     if (isLost != null) params['isLost'] = isLost.toString();
     if (isFound != null) params['isFound'] = isFound.toString();
     if (registrationType != null) params['registrationType'] = registrationType;
 
+    print('PetService: Fetching pets with params: $params');
+    if (isLost != null || isFound != null) {
+      print(
+          'PetService: Fetching public lost/found pets - no authentication required');
+    }
+
     final uri =
         Uri.parse('$_backendUrl/api/pets').replace(queryParameters: params);
     final res =
         await http.get(uri, headers: {'Content-Type': 'application/json'});
+
+    print('PetService: Response status: ${res.statusCode}');
+    print('PetService: Response body: ${res.body}');
+
     if (res.statusCode != 200) {
       throw Exception('Failed to fetch pets: ${res.body}');
     }
@@ -54,10 +91,28 @@ class PetService {
     required String gender,
     required String color,
     required String homeLocation,
-    required String ownerId,
+    String? ownerId,
     String registrationType = 'registered', // Default to registered
     File? profileImageFile,
   }) async {
+    // If ownerId is not provided, try to get it from session
+    String? finalOwnerId = ownerId;
+    if (finalOwnerId == null) {
+      // First check if we have a valid backend session
+      final userService = UserService();
+      final hasValidSession = await userService.hasValidBackendSession();
+      
+      if (hasValidSession) {
+        finalOwnerId = await SessionService().getBackendUserId();
+        print('PetService: Using ownerId from valid session for createPet: $finalOwnerId');
+      } else {
+        print('PetService: No valid backend session found for createPet');
+      }
+    }
+
+    if (finalOwnerId == null) {
+      throw Exception('Owner ID is required. Please log in again.');
+    }
     // If no image, send JSON; if image, send multipart so backend can upload to Firebase Storage
     if (profileImageFile == null) {
       final res = await http.post(
@@ -70,7 +125,7 @@ class PetService {
           'gender': gender,
           'color': color,
           'homeLocation': homeLocation,
-          'ownerId': ownerId,
+          'ownerId': finalOwnerId,
           'registrationType': registrationType,
         }),
       );
@@ -88,7 +143,7 @@ class PetService {
           ..fields['gender'] = gender
           ..fields['color'] = color
           ..fields['homeLocation'] = homeLocation
-          ..fields['ownerId'] = ownerId
+          ..fields['ownerId'] = finalOwnerId
           ..fields['registrationType'] = registrationType
           ..files.add(await http.MultipartFile.fromPath(
               'profileImage', profileImageFile.path));
@@ -206,6 +261,39 @@ class PetService {
     final res = await http.Response.fromStream(streamed);
     if (res.statusCode != 200) {
       throw Exception('Upload photos failed: ${res.body}');
+    }
+  }
+
+  // Recover session for Google users
+  Future<bool> _recoverSession() async {
+    try {
+      print('PetService: Attempting to recover session...');
+
+      final firebaseUser = FirebaseAuth.instance.currentUser;
+      if (firebaseUser == null) {
+        print('PetService: No Firebase user found');
+        return false;
+      }
+
+      print('PetService: Firebase user found: ${firebaseUser.uid}');
+      print('PetService: Firebase user email: ${firebaseUser.email}');
+
+      final userService = UserService();
+      final success = await userService.forceRefreshBackendSession();
+
+      if (success) {
+        print('PetService: Session recovered successfully');
+        // Verify the session was actually saved
+        final userId = await SessionService().getBackendUserId();
+        print('PetService: Verified session recovery, user ID: $userId');
+        return userId != null;
+      } else {
+        print('PetService: Failed to recover session');
+        return false;
+      }
+    } catch (e) {
+      print('PetService: Error recovering session: $e');
+      return false;
     }
   }
 }

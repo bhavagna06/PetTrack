@@ -16,9 +16,7 @@ class UserService {
     if (kIsWeb) {
       return 'http://localhost:3000';
     } else {
-      return Platform.isAndroid
-          ? 'http://10.0.2.2:3000'
-          : 'http://localhost:3000';
+      return 'http://${AuthService.getPhysicalDeviceIP()}:3000';
     }
   }
 
@@ -147,7 +145,32 @@ class UserService {
     return backendUser != null;
   }
 
-  // Get user ID (Firebase UID or MongoDB _id)
+  // Check if user has a valid backend session (for Google users)
+  Future<bool> hasValidBackendSession() async {
+    final backendUser = await _sessionService.getBackendUser();
+    if (backendUser != null && backendUser['_id'] != null) {
+      print(
+          'UserService: Valid backend session found with ID: ${backendUser['_id']}');
+      return true;
+    }
+
+    // For Google users, try to recover session if no backend session exists
+    final firebaseUser = _authService.currentUser;
+    if (firebaseUser != null) {
+      print(
+          'UserService: Google user detected, attempting session recovery...');
+      final success = await forceRefreshBackendSession();
+      if (success) {
+        print('UserService: Session recovery successful');
+        return true;
+      }
+    }
+
+    print('UserService: No valid backend session found');
+    return false;
+  }
+
+  // Get user ID (MongoDB _id for backend operations)
   Future<String?> getUserId() async {
     // First check if we have a backend session (for Google users or email/phone users)
     final backendUserId = await _sessionService.getBackendUserId();
@@ -167,7 +190,8 @@ class UserService {
           return await _sessionService.getBackendUserId();
         }
       }
-      return firebaseUser.uid;
+      // Don't return Firebase UID - we need MongoDB _id for backend operations
+      return null;
     }
 
     return null;
@@ -179,12 +203,13 @@ class UserService {
       print(
           'UserService: Ensuring backend session for Google user: ${firebaseUser.uid}');
 
-      // Get Google account info
-      final googleSignIn = GoogleSignIn();
-      final googleUser = await googleSignIn.signInSilently();
+      // Get Google account info from Firebase user
+      final email = firebaseUser.email;
+      final displayName = firebaseUser.displayName;
+      final photoURL = firebaseUser.photoURL;
 
-      if (googleUser != null) {
-        print('UserService: Found Google account: ${googleUser.email}');
+      if (email != null) {
+        print('UserService: Using Firebase user data: $email');
 
         final response = await http.post(
           Uri.parse('$_backendUrl/api/users/google-auth'),
@@ -193,30 +218,36 @@ class UserService {
           },
           body: json.encode({
             'firebaseUid': firebaseUser.uid,
-            'email': googleUser.email,
-            'name': googleUser.displayName,
-            'profileImage': googleUser.photoUrl,
+            'email': email,
+            'name': displayName ?? 'Google User',
+            'profileImage': photoURL,
           }),
         );
 
         print('UserService: Backend response status: ${response.statusCode}');
+        print('UserService: Backend response body: ${response.body}');
+
         final data = json.decode(response.body);
 
         if (response.statusCode == 200 && data['success']) {
           print('UserService: Backend authentication successful');
+          print('UserService: User data: ${data['data']}');
           // Store backend session locally
-          await _sessionService
-              .saveBackendUser((data['data'] as Map).cast<String, dynamic>());
+          final userData = (data['data'] as Map).cast<String, dynamic>();
+          await _sessionService.saveBackendUser(userData);
+          print(
+              'UserService: Backend session saved with user ID: ${userData['_id']}');
           return true;
         } else {
           print(
               'UserService: Backend authentication failed: ${data['message']}');
         }
       } else {
-        print('UserService: No Google account found for silent sign-in');
+        print('UserService: No email found in Firebase user');
       }
     } catch (e) {
       print('UserService: Error ensuring backend session: $e');
+      print('UserService: Error type: ${e.runtimeType}');
     }
     return false;
   }
@@ -228,5 +259,135 @@ class UserService {
 
     final backendUser = await _sessionService.getBackendUser();
     return backendUser != null ? 'email' : null;
+  }
+
+  // Debug method to check session status
+  Future<Map<String, dynamic>> debugSessionStatus() async {
+    final firebaseUser = _authService.currentUser;
+    final backendUser = await _sessionService.getBackendUser();
+    final backendUserId = await _sessionService.getBackendUserId();
+    final hasBackendSession = await _sessionService.hasBackendSession();
+    final hasValidSession = await hasValidBackendSession();
+
+    return {
+      'firebaseUser': firebaseUser != null
+          ? {
+              'uid': firebaseUser.uid,
+              'email': firebaseUser.email,
+              'displayName': firebaseUser.displayName,
+            }
+          : null,
+      'backendUser': backendUser,
+      'backendUserId': backendUserId,
+      'hasBackendSession': hasBackendSession,
+      'hasValidBackendSession': hasValidSession,
+      'isAuthenticated': await isAuthenticated(),
+    };
+  }
+
+  // Force refresh backend session for Google users
+  Future<bool> forceRefreshBackendSession() async {
+    try {
+      print('UserService: Force refreshing backend session...');
+
+      final firebaseUser = _authService.currentUser;
+      if (firebaseUser == null) {
+        print('UserService: No Firebase user found');
+        return false;
+      }
+
+      print('UserService: Firebase user found: ${firebaseUser.uid}');
+      print('UserService: Firebase user email: ${firebaseUser.email}');
+
+      // Clear existing session
+      await _sessionService.clearBackendSession();
+      print('UserService: Cleared existing session');
+
+      // Re-authenticate with backend
+      final success = await _ensureBackendSession(firebaseUser);
+
+      if (success) {
+        print('UserService: Backend session refreshed successfully');
+        // Verify the session was actually saved
+        final userId = await _sessionService.getBackendUserId();
+        print('UserService: Verified session refresh, user ID: $userId');
+        return userId != null;
+      } else {
+        print('UserService: Failed to refresh backend session');
+        return false;
+      }
+    } catch (e) {
+      print('UserService: Error refreshing backend session: $e');
+      return false;
+    }
+  }
+
+  // Test backend connection and session creation
+  Future<Map<String, dynamic>> testBackendConnectionAndSession() async {
+    final results = <String, dynamic>{};
+
+    try {
+      print('UserService: Testing backend connection and session...');
+
+      // Test 1: Check if backend is reachable
+      final canConnect = await _authService.testBackendConnection();
+      results['backendReachable'] = canConnect;
+
+      if (!canConnect) {
+        results['error'] = 'Backend not reachable';
+        return results;
+      }
+
+      // Test 2: Check current session status
+      final sessionStatus = await debugSessionStatus();
+      results['currentSessionStatus'] = sessionStatus;
+
+      // Test 3: If Firebase user exists but no backend session, try to create one
+      final firebaseUser = _authService.currentUser;
+      if (firebaseUser != null && !sessionStatus['hasValidBackendSession']) {
+        print(
+            'UserService: Attempting to create backend session for Firebase user');
+        final success = await forceRefreshBackendSession();
+        results['sessionCreationSuccess'] = success;
+
+        if (success) {
+          final newSessionStatus = await debugSessionStatus();
+          results['newSessionStatus'] = newSessionStatus;
+        }
+      }
+    } catch (e) {
+      results['error'] = e.toString();
+      print('UserService: Error testing backend connection and session: $e');
+    }
+
+    return results;
+  }
+
+  // Quick test method for debugging
+  Future<void> quickTest() async {
+    try {
+      print('=== QUICK TEST START ===');
+
+      // Test backend connection
+      final canConnect = await _authService.testBackendConnection();
+      print('Backend reachable: $canConnect');
+
+      if (!canConnect) {
+        print('❌ Backend not reachable');
+        return;
+      }
+
+      // Test session status
+      final sessionStatus = await debugSessionStatus();
+      print('Session status: $sessionStatus');
+
+      // Test user ID retrieval
+      final userId = await getUserId();
+      print('User ID: $userId');
+
+      print('=== QUICK TEST END ===');
+    } catch (e) {
+      print('Quick test error: $e');
+    }
   }
 }

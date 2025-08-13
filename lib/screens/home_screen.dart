@@ -6,6 +6,8 @@ import 'post_lost_pet_screen.dart';
 import 'post_found_pet_screen.dart';
 import 'pet_details_screen.dart';
 import '../services/pet_service.dart';
+import '../services/user_service.dart';
+import '../services/auth_service.dart';
 
 class PetTrackingHomeScreen extends StatefulWidget {
   const PetTrackingHomeScreen({Key? key}) : super(key: key);
@@ -24,6 +26,7 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
   bool _isLoading = true;
   String? _error;
   final PetService _petService = PetService();
+  final UserService _userService = UserService();
 
   final List<String> _searchCategories = [
     'All',
@@ -37,6 +40,93 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
   void initState() {
     super.initState();
     _loadPets();
+    _debugSessionStatus();
+    _ensureBackendSession();
+  }
+
+  // Ensure backend session exists for Google users
+  Future<void> _ensureBackendSession() async {
+    try {
+      final status = await _userService.debugSessionStatus();
+
+      // If Firebase user exists but no backend session, try to recover
+      if (status['firebaseUser'] != null && !status['hasBackendSession']) {
+        print(
+            'HomeScreen: Firebase user found but no backend session, attempting recovery...');
+        final success = await _userService.forceRefreshBackendSession();
+        if (success) {
+          print('HomeScreen: Backend session recovered on app start');
+          // Reload pets after session recovery
+          _loadPets();
+        }
+      }
+    } catch (e) {
+      print('HomeScreen: Error ensuring backend session: $e');
+    }
+  }
+
+  // Debug method to check session status
+  Future<void> _debugSessionStatus() async {
+    try {
+      final status = await _userService.debugSessionStatus();
+      print('HomeScreen: Session Status: $status');
+    } catch (e) {
+      print('HomeScreen: Error checking session status: $e');
+    }
+  }
+
+  // Test Google auth flow
+  Future<void> _testGoogleAuthFlow() async {
+    try {
+      final results = await AuthService.testGoogleAuthFlow();
+      print('HomeScreen: Google Auth Flow Test Results: $results');
+
+      // Show results in a snackbar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              results['error'] != null
+                  ? '❌ Test failed: ${results['error']}'
+                  : '✅ Test completed. Check logs for details.',
+            ),
+            backgroundColor:
+                results['error'] != null ? Colors.red : Colors.green,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      print('HomeScreen: Error testing Google auth flow: $e');
+    }
+  }
+
+  // Force refresh backend session
+  Future<void> _forceRefreshSession() async {
+    try {
+      final success = await _userService.forceRefreshBackendSession();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              success
+                  ? '✅ Session refreshed successfully'
+                  : '❌ Failed to refresh session',
+            ),
+            backgroundColor: success ? Colors.green : Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      // Reload pets after session refresh
+      if (success) {
+        _loadPets();
+      }
+    } catch (e) {
+      print('HomeScreen: Error refreshing session: $e');
+    }
   }
 
   Future<void> _loadPets() async {
@@ -45,15 +135,15 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
       _error = null;
     });
     try {
-      // Load lost pets (both reported pets and registered pets marked as lost)
+      // Load lost pets (public - visible to everyone regardless of login status)
       final lostPets = await _petService.fetchPets(
         isLost: true,
-        // Remove registrationType filter to include both reported and registered pets
+        // No authentication required for viewing lost pets
       );
-      // Load found pets (both reported pets and registered pets marked as found)
+      // Load found pets (public - visible to everyone regardless of login status)
       final foundPets = await _petService.fetchPets(
         isFound: true,
-        // Remove registrationType filter to include both reported and registered pets
+        // No authentication required for viewing found pets
       );
 
       setState(() {
@@ -150,16 +240,41 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
             // Header
             Container(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: const Center(
-                child: Text(
-                  'PetTrack',
-                  style: TextStyle(
-                    color: Color(0xFF1C150D),
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.015,
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Center(
+                      child: Text(
+                        'PetTrack',
+                        style: TextStyle(
+                          color: Color(0xFF1C150D),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.015,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  // Debug buttons
+                  // IconButton(
+                  //   onPressed: _testGoogleAuthFlow,
+                  //   icon: const Icon(
+                  //     Icons.bug_report,
+                  //     color: Colors.blue,
+                  //     size: 20,
+                  //   ),
+                  //   tooltip: 'Test Google Auth Flow',
+                  // ),
+                  // IconButton(
+                  //   onPressed: _forceRefreshSession,
+                  //   icon: const Icon(
+                  //     Icons.refresh,
+                  //     color: Colors.orange,
+                  //     size: 20,
+                  //   ),
+                  //   tooltip: 'Refresh Session',
+                  // ),
+                ],
               ),
             ),
 

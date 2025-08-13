@@ -7,6 +7,7 @@ import 'profile_screen.dart'; // Added import for ProfileScreen
 import 'package:image_picker/image_picker.dart';
 import '../services/pet_service.dart';
 import '../services/session_service.dart';
+import '../services/user_service.dart';
 import 'dart:io';
 
 class PostLostPetScreen extends StatefulWidget {
@@ -653,10 +654,23 @@ class _PostLostPetScreenState extends State<PostLostPetScreen> {
     }
     setState(() => _isPosting = true);
     try {
-      final ownerId = await SessionService().getBackendUserId();
-      if (ownerId == null) {
+      // Check if user has a valid backend session
+      final userService = UserService();
+      final hasValidSession = await userService.hasValidBackendSession();
+      
+      if (!hasValidSession) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Please login first'), backgroundColor: Colors.red));
+        return;
+      }
+      
+      String? ownerId = await SessionService().getBackendUserId();
+      print('PostLostPetScreen: Using ownerId: $ownerId');
+      
+      if (ownerId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Unable to get user ID. Please try logging in again.'), 
+            backgroundColor: Colors.red));
         return;
       }
       final petService = PetService();

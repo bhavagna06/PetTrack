@@ -40,19 +40,18 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
   void initState() {
     super.initState();
     _loadPets();
-    _debugSessionStatus();
     _ensureBackendSession();
   }
 
   // Ensure backend session exists for Google users
   Future<void> _ensureBackendSession() async {
     try {
-      final status = await _userService.debugSessionStatus();
+      // Check if user has a valid backend session
+      final hasValidSession = await _userService.hasValidBackendSession();
 
-      // If Firebase user exists but no backend session, try to recover
-      if (status['firebaseUser'] != null && !status['hasBackendSession']) {
+      if (!hasValidSession) {
         print(
-            'HomeScreen: Firebase user found but no backend session, attempting recovery...');
+            'HomeScreen: No valid backend session found, attempting recovery...');
         final success = await _userService.forceRefreshBackendSession();
         if (success) {
           print('HomeScreen: Backend session recovered on app start');
@@ -62,70 +61,6 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
       }
     } catch (e) {
       print('HomeScreen: Error ensuring backend session: $e');
-    }
-  }
-
-  // Debug method to check session status
-  Future<void> _debugSessionStatus() async {
-    try {
-      final status = await _userService.debugSessionStatus();
-      print('HomeScreen: Session Status: $status');
-    } catch (e) {
-      print('HomeScreen: Error checking session status: $e');
-    }
-  }
-
-  // Test Google auth flow
-  Future<void> _testGoogleAuthFlow() async {
-    try {
-      final results = await AuthService.testGoogleAuthFlow();
-      print('HomeScreen: Google Auth Flow Test Results: $results');
-
-      // Show results in a snackbar
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              results['error'] != null
-                  ? '❌ Test failed: ${results['error']}'
-                  : '✅ Test completed. Check logs for details.',
-            ),
-            backgroundColor:
-                results['error'] != null ? Colors.red : Colors.green,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    } catch (e) {
-      print('HomeScreen: Error testing Google auth flow: $e');
-    }
-  }
-
-  // Force refresh backend session
-  Future<void> _forceRefreshSession() async {
-    try {
-      final success = await _userService.forceRefreshBackendSession();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              success
-                  ? '✅ Session refreshed successfully'
-                  : '❌ Failed to refresh session',
-            ),
-            backgroundColor: success ? Colors.green : Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-
-      // Reload pets after session refresh
-      if (success) {
-        _loadPets();
-      }
-    } catch (e) {
-      print('HomeScreen: Error refreshing session: $e');
     }
   }
 
@@ -255,25 +190,6 @@ class _PetTrackingHomeScreenState extends State<PetTrackingHomeScreen> {
                       ),
                     ),
                   ),
-                  // Debug buttons
-                  // IconButton(
-                  //   onPressed: _testGoogleAuthFlow,
-                  //   icon: const Icon(
-                  //     Icons.bug_report,
-                  //     color: Colors.blue,
-                  //     size: 20,
-                  //   ),
-                  //   tooltip: 'Test Google Auth Flow',
-                  // ),
-                  // IconButton(
-                  //   onPressed: _forceRefreshSession,
-                  //   icon: const Icon(
-                  //     Icons.refresh,
-                  //     color: Colors.orange,
-                  //     size: 20,
-                  //   ),
-                  //   tooltip: 'Refresh Session',
-                  // ),
                 ],
               ),
             ),

@@ -250,8 +250,9 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
                             const SizedBox(height: 12),
                             TextButton(
                               onPressed: () async {
+                                // Show image picker dialog with camera and gallery options
                                 final File? picked =
-                                    await _imageService.pickImageFromGallery();
+                                    await _showImagePickerDialog(context);
                                 if (picked != null) {
                                   setState(() {
                                     _selectedImage = picked;
@@ -865,6 +866,282 @@ class _PetProfileScreenState extends State<PetProfileScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Future<File?> _showImagePickerDialog(BuildContext context) async {
+    return await showModalBottomSheet<File?>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFFCFAF8),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF9C7649).withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Title
+              Text(
+                'Select Image',
+                style: TextStyle(
+                  color: const Color(0xFF1C150D),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Plus Jakarta Sans',
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Options
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  children: [
+                    // Camera option
+                    _buildOptionTile(
+                      context,
+                      icon: Icons.camera_alt_outlined,
+                      title: 'Take Photo',
+                      subtitle: 'Use camera to capture image',
+                      onTap: () async {
+                        Navigator.pop(context);
+                        final File? image =
+                            await _imageService.pickImageFromCamera();
+                        if (image != null) {
+                          // Show confirmation dialog for camera photo
+                          final bool? shouldUseImage =
+                              await _showCameraConfirmationDialog(
+                                  context, image);
+                          if (shouldUseImage == true) {
+                            Navigator.pop(context, image);
+                          }
+                        }
+                      },
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Gallery option
+                    _buildOptionTile(
+                      context,
+                      icon: Icons.photo_library_outlined,
+                      title: 'Choose Photo',
+                      subtitle: 'Select image from gallery',
+                      onTap: () async {
+                        Navigator.pop(context);
+                        final File? image =
+                            await _imageService.pickImageFromGallery();
+                        if (image != null) {
+                          Navigator.pop(context, image);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Cancel button
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: const Color(0xFF9C7649),
+                      fontSize: 16,
+                      fontFamily: 'Plus Jakarta Sans',
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildOptionTile(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4EEE7),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0xFF9C7649).withOpacity(0.2),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF9C7649).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                color: const Color(0xFF9C7649),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Color(0xFF1C150D),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: 'Plus Jakarta Sans',
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: const Color(0xFF1C150D).withOpacity(0.7),
+                      fontSize: 12,
+                      fontFamily: 'Plus Jakarta Sans',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Color(0xFF9C7649),
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<bool?> _showCameraConfirmationDialog(
+      BuildContext context, File image) async {
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.camera_alt,
+                color: const Color(0xFF9C7649),
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Photo Captured',
+                style: TextStyle(
+                  color: Color(0xFF1C150D),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Plus Jakarta Sans',
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(
+                  image,
+                  width: 200,
+                  height: 200,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Would you like to use this photo?',
+                style: TextStyle(
+                  color: Color(0xFF1C150D),
+                  fontSize: 16,
+                  fontFamily: 'Plus Jakarta Sans',
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(
+                'Retake',
+                style: TextStyle(
+                  color: const Color(0xFF9C7649),
+                  fontSize: 16,
+                  fontFamily: 'Plus Jakarta Sans',
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF9C7649),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(
+                'Use Photo',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontFamily: 'Plus Jakarta Sans',
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

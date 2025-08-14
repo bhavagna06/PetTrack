@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/pet_service.dart';
 import '../services/session_service.dart';
 import '../services/user_service.dart';
+import '../widgets/image_picker_widget.dart';
 import 'dart:io';
 
 class PostFoundPetScreen extends StatefulWidget {
@@ -522,29 +523,16 @@ class _PostFoundPetScreenState extends State<PostFoundPetScreen> {
               style: TextStyle(color: primaryTextColor, fontSize: 14),
             ),
             const SizedBox(height: 16),
-            TextButton(
-              onPressed: () async {
-                final photos = await _picker.pickMultiImage(imageQuality: 85);
-                if (photos.isNotEmpty) {
-                  setState(() {
-                    _pickedPhotos
-                      ..clear()
-                      ..addAll(photos);
-                  });
-                }
+            ImagePickerWidget(
+              onImageSelected: (File image) {
+                setState(() {
+                  _pickedPhotos.add(XFile(image.path));
+                });
               },
-              style: TextButton.styleFrom(
-                backgroundColor: inputBgColor,
-                foregroundColor: primaryTextColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
-              child: const Text(
-                'Upload',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+              title: 'Upload Photos',
+              subtitle: 'Add photos of your pet',
+              allowMultiple: true,
+              maxImages: 5,
             ),
             if (_pickedPhotos.isNotEmpty) ...[
               const SizedBox(height: 12),

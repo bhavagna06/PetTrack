@@ -96,6 +96,8 @@ class ImageService {
         // Verify file exists and is readable
         if (await file.exists()) {
           print('ImageService: File exists and is readable');
+          print('ImageService: File size: ${await file.length()} bytes');
+          print('ImageService: File path: ${file.path}');
           return file;
         } else {
           print('ImageService: File does not exist after picking');
@@ -107,6 +109,7 @@ class ImageService {
     } catch (e) {
       print('ImageService: Error picking image from camera: $e');
       print('ImageService: Error type: ${e.runtimeType}');
+      print('ImageService: Error stack trace: ${e.toString()}');
       return null;
     }
   }
@@ -137,6 +140,8 @@ class ImageService {
         // Verify file exists and is readable
         if (await file.exists()) {
           print('ImageService: File exists and is readable');
+          print('ImageService: File size: ${await file.length()} bytes');
+          print('ImageService: File path: ${file.path}');
           return file;
         } else {
           print('ImageService: File does not exist after picking');
@@ -148,12 +153,13 @@ class ImageService {
     } catch (e) {
       print('ImageService: Error picking image from gallery: $e');
       print('ImageService: Error type: ${e.runtimeType}');
+      print('ImageService: Error stack trace: ${e.toString()}');
       return null;
     }
   }
 
   // Pick multiple images from gallery
-  Future<List<File>> pickMultipleImagesFromGallery({int maxImages = 5}) async {
+  Future<List<File>> pickMultipleImagesFromGallery({int maxImages = 2}) async {
     try {
       final List<XFile> images = await _picker.pickMultiImage(
         imageQuality: 85,
@@ -173,17 +179,30 @@ class ImageService {
     }
   }
 
-  // Upload single image to Firebase Storage
+  // Upload single image to Firebase Storage with progress tracking
   Future<String?> uploadImageToFirebase({
     required File imageFile,
     required String folder,
     String? customFileName,
+    Function(double)? onProgress,
   }) async {
     try {
       print('ImageService: Starting Firebase upload...');
       print('ImageService: File path: ${imageFile.path}');
       print('ImageService: File exists: ${await imageFile.exists()}');
       print('ImageService: File size: ${await imageFile.length()} bytes');
+
+      // Validate file before upload
+      if (!await imageFile.exists()) {
+        print('ImageService: Error - File does not exist');
+        return null;
+      }
+
+      final int fileSize = await imageFile.length();
+      if (fileSize == 0) {
+        print('ImageService: Error - File is empty');
+        return null;
+      }
 
       // Generate unique filename
       final String fileName = customFileName ??
@@ -194,9 +213,19 @@ class ImageService {
       // Create reference to Firebase Storage
       final Reference ref = _storage.ref().child('$folder/$fileName');
 
-      // Upload file
+      // Upload file with progress tracking
       print('ImageService: Starting upload task...');
       final UploadTask uploadTask = ref.putFile(imageFile);
+
+      // Listen to upload progress
+      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+        final double progress = snapshot.bytesTransferred / snapshot.totalBytes;
+        print(
+            'ImageService: Upload progress: ${(progress * 100).toStringAsFixed(1)}%');
+        if (onProgress != null) {
+          onProgress(progress);
+        }
+      });
 
       // Wait for upload to complete
       final TaskSnapshot snapshot = await uploadTask;
@@ -210,29 +239,58 @@ class ImageService {
     } catch (e) {
       print('ImageService: Error uploading image to Firebase: $e');
       print('ImageService: Error type: ${e.runtimeType}');
+      print('ImageService: Error details: ${e.toString()}');
+      print('ImageService: Firebase Storage upload failed');
       return null;
     }
   }
 
-  // Upload multiple images to Firebase Storage
+  // Upload multiple images to Firebase Storage in parallel
   Future<List<String>> uploadMultipleImagesToFirebase({
     required List<File> imageFiles,
     required String folder,
+    Function(int, double)? onProgress,
   }) async {
     try {
       final List<String> downloadUrls = [];
+      final int totalImages = imageFiles.length;
+      int completedImages = 0;
 
-      for (final File imageFile in imageFiles) {
-        final String? downloadUrl = await uploadImageToFirebase(
+      print('ImageService: Starting parallel upload of $totalImages images');
+
+      // Upload images in parallel with progress tracking
+      final List<Future<String?>> uploadFutures =
+          imageFiles.asMap().entries.map((entry) {
+        final int index = entry.key;
+        final File imageFile = entry.value;
+
+        return uploadImageToFirebase(
           imageFile: imageFile,
           folder: folder,
-        );
+          onProgress: (progress) {
+            if (onProgress != null) {
+              onProgress(index, progress);
+            }
+          },
+        ).then((url) {
+          completedImages++;
+          print('ImageService: Completed $completedImages/$totalImages images');
+          return url;
+        });
+      }).toList();
 
-        if (downloadUrl != null) {
-          downloadUrls.add(downloadUrl);
+      // Wait for all uploads to complete in parallel
+      final List<String?> results = await Future.wait(uploadFutures);
+
+      // Filter out null results
+      for (final String? result in results) {
+        if (result != null) {
+          downloadUrls.add(result);
         }
       }
 
+      print(
+          'ImageService: Successfully uploaded ${downloadUrls.length}/$totalImages images');
       return downloadUrls;
     } catch (e) {
       print('Error uploading multiple images to Firebase: $e');
@@ -284,6 +342,7 @@ class ImageService {
 
       // Check file size (max 10MB)
       if (sizeInMB > 10) {
+        print('ImageService: File too large: ${sizeInMB.toStringAsFixed(2)}MB');
         return false;
       }
 
@@ -296,9 +355,12 @@ class ImageService {
         'webp'
       ];
       if (!allowedExtensions.contains(extension)) {
+        print('ImageService: Invalid file extension: $extension');
         return false;
       }
 
+      print(
+          'ImageService: File validation passed - Size: ${sizeInMB.toStringAsFixed(2)}MB, Extension: $extension');
       return true;
     } catch (e) {
       print('Error validating image file: $e');

@@ -248,57 +248,7 @@ class AuthService {
     }
   }
 
-  // Test backend connectivity
-  Future<bool> testBackendConnection() async {
-    try {
-      print('AuthService: Testing connection to $_backendUrl');
 
-      final response = await http.get(
-        Uri.parse('$_backendUrl/health'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 10));
-
-      print('AuthService: Backend health check status: ${response.statusCode}');
-      print('AuthService: Backend health check response: ${response.body}');
-
-      return response.statusCode == 200;
-    } catch (e) {
-      print('AuthService: Backend connection test failed: $e');
-      print('AuthService: Current backend URL: $_backendUrl');
-      return false;
-    }
-  }
-
-  // Enhanced connection test with detailed logging
-  Future<Map<String, dynamic>> testConnectionWithDetails() async {
-    try {
-      print('AuthService: Testing connection to $_backendUrl');
-
-      final response = await http.get(
-        Uri.parse('$_backendUrl/health'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 10));
-
-      return {
-        'success': response.statusCode == 200,
-        'statusCode': response.statusCode,
-        'response': response.body,
-        'url': _backendUrl,
-        'platform': Platform.isAndroid ? 'Android' : 'iOS',
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'error': e.toString(),
-        'url': _backendUrl,
-        'platform': Platform.isAndroid ? 'Android' : 'iOS',
-      };
-    }
-  }
 
   // Email registration with MongoDB backend
   Future<Map<String, dynamic>> signUpWithEmail({
@@ -541,8 +491,8 @@ class AuthService {
   static String getPhysicalDeviceIP() {
     // Replace this with your computer's actual IP address
     // You can find it by running 'ipconfig' on Windows
-    return '192.168.110.45'; // Your computer's IP address //phone ip address
-    // return '192.168.29.159'; // Your computer's IP address //phone ip address
+    // return '192.168.110.45'; // Your computer's IP address //phone ip address
+    return '192.168.29.159'; // Your computer's IP address //phone ip address
   }
 
   // Simple method to test if the app can reach the backend
@@ -560,103 +510,5 @@ class AuthService {
       print('Connection test failed: $e');
       return false;
     }
-  }
-
-  // Test Google authentication flow
-  static Future<Map<String, dynamic>> testGoogleAuthFlow() async {
-    final results = <String, dynamic>{};
-
-    try {
-      print('=== TESTING GOOGLE AUTH FLOW ===');
-
-      // Test 1: Check backend connectivity
-      final canConnect = await canReachBackend();
-      results['backendConnectivity'] = canConnect;
-
-      if (!canConnect) {
-        results['error'] = 'Backend not reachable';
-        return results;
-      }
-
-      // Test 2: Test Google auth endpoint directly
-      final testData = {
-        'firebaseUid': 'test-uid-123',
-        'email': 'test@example.com',
-        'name': 'Test User',
-        'profileImage': 'https://example.com/photo.jpg'
-      };
-
-      final response = await http
-          .post(
-            Uri.parse(
-                'http://${getPhysicalDeviceIP()}:3000/api/users/google-auth'),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode(testData),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      results['googleAuthEndpointStatus'] = response.statusCode;
-      results['googleAuthEndpointResponse'] = response.body;
-
-      print('Google auth endpoint test: ${response.statusCode}');
-      print('Response: ${response.body}');
-    } catch (e) {
-      results['error'] = e.toString();
-      print('Google auth flow test failed: $e');
-    }
-
-    print('=== END GOOGLE AUTH FLOW TEST ===');
-    return results;
-  }
-
-  // Comprehensive connection test with detailed diagnostics
-  static Future<Map<String, dynamic>> comprehensiveConnectionTest() async {
-    final results = <String, dynamic>{};
-
-    try {
-      // Test 1: Basic connectivity
-      final url = 'http://${getPhysicalDeviceIP()}:3000/health';
-      print('=== COMPREHENSIVE CONNECTION TEST ===');
-      print('Testing URL: $url');
-
-      final response =
-          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
-
-      results['statusCode'] = response.statusCode;
-      results['responseBody'] = response.body;
-      results['headers'] = response.headers;
-      results['success'] = response.statusCode == 200;
-
-      print('Response Status: ${response.statusCode}');
-      print('Response Body: ${response.body}');
-      print('Response Headers: ${response.headers}');
-
-      // Test 2: Try a POST request to login endpoint
-      try {
-        final loginResponse = await http
-            .post(
-              Uri.parse('http://${getPhysicalDeviceIP()}:3000/api/users/login'),
-              headers: {'Content-Type': 'application/json'},
-              body: json.encode({'email': 'test@test.com', 'password': 'test'}),
-            )
-            .timeout(const Duration(seconds: 10));
-
-        results['loginEndpointStatus'] = loginResponse.statusCode;
-        results['loginEndpointBody'] = loginResponse.body;
-        print('Login endpoint test: ${loginResponse.statusCode}');
-      } catch (e) {
-        results['loginEndpointError'] = e.toString();
-        print('Login endpoint test failed: $e');
-      }
-    } catch (e) {
-      results['error'] = e.toString();
-      results['errorType'] = e.runtimeType.toString();
-      results['success'] = false;
-      print('Comprehensive test failed: $e');
-      print('Error type: ${e.runtimeType}');
-    }
-
-    print('=== END CONNECTION TEST ===');
-    return results;
   }
 }

@@ -261,30 +261,6 @@ class UserService {
     return backendUser != null ? 'email' : null;
   }
 
-  // Debug method to check session status
-  Future<Map<String, dynamic>> debugSessionStatus() async {
-    final firebaseUser = _authService.currentUser;
-    final backendUser = await _sessionService.getBackendUser();
-    final backendUserId = await _sessionService.getBackendUserId();
-    final hasBackendSession = await _sessionService.hasBackendSession();
-    final hasValidSession = await hasValidBackendSession();
-
-    return {
-      'firebaseUser': firebaseUser != null
-          ? {
-              'uid': firebaseUser.uid,
-              'email': firebaseUser.email,
-              'displayName': firebaseUser.displayName,
-            }
-          : null,
-      'backendUser': backendUser,
-      'backendUserId': backendUserId,
-      'hasBackendSession': hasBackendSession,
-      'hasValidBackendSession': hasValidSession,
-      'isAuthenticated': await isAuthenticated(),
-    };
-  }
-
   // Force refresh backend session for Google users
   Future<bool> forceRefreshBackendSession() async {
     try {
@@ -319,75 +295,6 @@ class UserService {
     } catch (e) {
       print('UserService: Error refreshing backend session: $e');
       return false;
-    }
-  }
-
-  // Test backend connection and session creation
-  Future<Map<String, dynamic>> testBackendConnectionAndSession() async {
-    final results = <String, dynamic>{};
-
-    try {
-      print('UserService: Testing backend connection and session...');
-
-      // Test 1: Check if backend is reachable
-      final canConnect = await _authService.testBackendConnection();
-      results['backendReachable'] = canConnect;
-
-      if (!canConnect) {
-        results['error'] = 'Backend not reachable';
-        return results;
-      }
-
-      // Test 2: Check current session status
-      final sessionStatus = await debugSessionStatus();
-      results['currentSessionStatus'] = sessionStatus;
-
-      // Test 3: If Firebase user exists but no backend session, try to create one
-      final firebaseUser = _authService.currentUser;
-      if (firebaseUser != null && !sessionStatus['hasValidBackendSession']) {
-        print(
-            'UserService: Attempting to create backend session for Firebase user');
-        final success = await forceRefreshBackendSession();
-        results['sessionCreationSuccess'] = success;
-
-        if (success) {
-          final newSessionStatus = await debugSessionStatus();
-          results['newSessionStatus'] = newSessionStatus;
-        }
-      }
-    } catch (e) {
-      results['error'] = e.toString();
-      print('UserService: Error testing backend connection and session: $e');
-    }
-
-    return results;
-  }
-
-  // Quick test method for debugging
-  Future<void> quickTest() async {
-    try {
-      print('=== QUICK TEST START ===');
-
-      // Test backend connection
-      final canConnect = await _authService.testBackendConnection();
-      print('Backend reachable: $canConnect');
-
-      if (!canConnect) {
-        print('❌ Backend not reachable');
-        return;
-      }
-
-      // Test session status
-      final sessionStatus = await debugSessionStatus();
-      print('Session status: $sessionStatus');
-
-      // Test user ID retrieval
-      final userId = await getUserId();
-      print('User ID: $userId');
-
-      print('=== QUICK TEST END ===');
-    } catch (e) {
-      print('Quick test error: $e');
     }
   }
 }

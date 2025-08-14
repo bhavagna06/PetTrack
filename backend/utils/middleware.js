@@ -5,13 +5,24 @@ const { validationResult } = require('express-validator');
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024 // 5MB limit
+    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024 // 10MB limit
   },
   fileFilter: function (req, file, cb) {
-    // Accept only images
-    if (file.mimetype.startsWith('image/')) {
+    console.log('File upload attempt:', {
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
+    });
+    
+    // Accept only images - check both MIME type and file extension
+    const isImageMimeType = file.mimetype.startsWith('image/');
+    const hasImageExtension = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.originalname);
+    
+    if (isImageMimeType || hasImageExtension) {
+      console.log('File accepted:', file.originalname);
       cb(null, true);
     } else {
+      console.log('File rejected:', file.originalname, 'MIME type:', file.mimetype);
       cb(new Error('Only image files are allowed!'), false);
     }
   }

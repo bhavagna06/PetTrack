@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http_parser/http_parser.dart';
 import 'auth_service.dart';
 import 'session_service.dart';
 import 'user_service.dart';
@@ -36,7 +37,7 @@ class PetService {
       // First check if we have a valid backend session
       final userService = UserService();
       final hasValidSession = await userService.hasValidBackendSession();
-      
+
       if (hasValidSession) {
         finalOwnerId = await SessionService().getBackendUserId();
         print('PetService: Using ownerId from valid session: $finalOwnerId');
@@ -101,10 +102,11 @@ class PetService {
       // First check if we have a valid backend session
       final userService = UserService();
       final hasValidSession = await userService.hasValidBackendSession();
-      
+
       if (hasValidSession) {
         finalOwnerId = await SessionService().getBackendUserId();
-        print('PetService: Using ownerId from valid session for createPet: $finalOwnerId');
+        print(
+            'PetService: Using ownerId from valid session for createPet: $finalOwnerId');
       } else {
         print('PetService: No valid backend session found for createPet');
       }
@@ -250,18 +252,103 @@ class PetService {
   Future<void> uploadAdditionalPhotos({
     required String petId,
     required List<File> files,
+    Function(int, double)? onProgress,
   }) async {
     if (files.isEmpty) return;
-    final request = http.MultipartRequest(
-        'POST', Uri.parse('$_backendUrl/api/pets/$petId/upload-photos'));
-    for (final f in files) {
-      request.files.add(await http.MultipartFile.fromPath('photos', f.path));
+
+    print(
+        'PetService: Starting parallel upload of ${files.length} photos for pet $petId');
+    print('PetService: Backend URL: $_backendUrl');
+
+    // Test backend connectivity first
+    try {
+      final testResponse = await http.get(
+        Uri.parse('$_backendUrl/health'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 5));
+
+      print(
+          'PetService: Backend health check status: ${testResponse.statusCode}');
+      if (testResponse.statusCode != 200) {
+        throw Exception(
+            'Backend is not responding properly. Status: ${testResponse.statusCode}');
+      }
+    } catch (e) {
+      print('PetService: Backend connectivity test failed: $e');
+      throw Exception(
+          'Cannot connect to backend server. Please check your network connection and ensure the backend is running.');
     }
-    final streamed = await request.send();
-    final res = await http.Response.fromStream(streamed);
-    if (res.statusCode != 200) {
-      throw Exception('Upload photos failed: ${res.body}');
-    }
+
+    // Upload photos in parallel using multiple requests
+    final List<Future<void>> uploadFutures =
+        files.asMap().entries.map((entry) async {
+      final int index = entry.key;
+      final File file = entry.value;
+
+      try {
+        print(
+            'PetService: Starting upload for photo ${index + 1}: ${file.path}');
+        print('PetService: File exists: ${await file.exists()}');
+        print('PetService: File size: ${await file.length()} bytes');
+
+        final request = http.MultipartRequest(
+            'POST', Uri.parse('$_backendUrl/api/pets/$petId/upload-photos'));
+
+        // Get file extension to determine MIME type
+        final String extension = file.path.split('.').last.toLowerCase();
+        String mimeType = 'image/jpeg'; // default
+
+        switch (extension) {
+          case 'png':
+            mimeType = 'image/png';
+            break;
+          case 'gif':
+            mimeType = 'image/gif';
+            break;
+          case 'webp':
+            mimeType = 'image/webp';
+            break;
+          case 'jpg':
+          case 'jpeg':
+          default:
+            mimeType = 'image/jpeg';
+            break;
+        }
+
+        print('PetService: Using MIME type: $mimeType for file: ${file.path}');
+
+        request.files.add(await http.MultipartFile.fromPath(
+          'photos',
+          file.path,
+          contentType: MediaType.parse(mimeType),
+        ));
+
+        final streamed =
+            await request.send().timeout(const Duration(seconds: 30));
+        final res = await http.Response.fromStream(streamed);
+
+        print('PetService: Upload response status: ${res.statusCode}');
+        print('PetService: Upload response body: ${res.body}');
+
+        if (res.statusCode != 200) {
+          throw Exception('Upload photo failed: ${res.body}');
+        }
+
+        print(
+            'PetService: Successfully uploaded photo ${index + 1}/${files.length}');
+        if (onProgress != null) {
+          onProgress(index, 1.0); // 100% progress for this photo
+        }
+      } catch (e) {
+        print('PetService: Error uploading photo ${index + 1}: $e');
+        print('PetService: Error details: ${e.toString()}');
+        rethrow;
+      }
+    }).toList();
+
+    // Wait for all uploads to complete in parallel
+    await Future.wait(uploadFutures);
+    print('PetService: All photos uploaded successfully for pet $petId');
   }
 
   // Recover session for Google users

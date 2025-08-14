@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const multer = require('multer');
 const Pet = require('../models/Pet');
 const { body } = require('express-validator');
 const { firebaseStorage } = require('../config/firebase');
@@ -73,13 +74,15 @@ router.post('/', upload.single('profileImage'), validatePetData, handleValidatio
     // Upload profile image to Firebase if provided
     if (req.file) {
       try {
+        console.log('Uploading profile image to Firebase Storage...');
         const imageUrl = await firebaseStorage.uploadFile(req.file, 'pets');
         petData.profileImage = imageUrl;
+        console.log('Profile image uploaded successfully to Firebase:', imageUrl);
       } catch (uploadError) {
         console.error('Firebase upload error:', uploadError);
         return res.status(500).json({
           success: false,
-          message: 'Error uploading image to Firebase',
+          message: 'Error uploading image to Firebase Storage',
           error: uploadError.message
         });
       }
@@ -319,8 +322,28 @@ router.delete('/:id', async (req, res) => {
 // @route   POST /api/pets/:id/upload-photos
 // @desc    Upload additional photos for a pet
 // @access  Public (will add auth later)
-router.post('/:id/upload-photos', upload.array('photos', 5), async (req, res) => {
+router.post('/:id/upload-photos', upload.array('photos', 2), (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    console.error('Multer error:', err);
+    return res.status(400).json({
+      success: false,
+      message: 'File upload error',
+      error: err.message
+    });
+  } else if (err) {
+    console.error('Upload error:', err);
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+      error: 'Only image files are allowed!'
+    });
+  }
+  next();
+}, async (req, res) => {
   try {
+    console.log('Upload photos request received for pet:', req.params.id);
+    console.log('Files received:', req.files ? req.files.length : 0);
+    
     const pet = await Pet.findById(req.params.id);
 
     if (!pet) {
@@ -338,6 +361,7 @@ router.post('/:id/upload-photos', upload.array('photos', 5), async (req, res) =>
     }
 
     try {
+      console.log('Uploading additional photos to Firebase Storage...');
       // Upload photos to Firebase
       const imageUrls = await firebaseStorage.uploadMultipleFiles(req.files, 'pets');
       
@@ -347,7 +371,7 @@ router.post('/:id/upload-photos', upload.array('photos', 5), async (req, res) =>
 
       res.json({
         success: true,
-        message: 'Photos uploaded successfully',
+        message: 'Photos uploaded successfully to Firebase Storage',
         data: {
           petId: pet._id,
           newPhotos: imageUrls,
@@ -358,7 +382,7 @@ router.post('/:id/upload-photos', upload.array('photos', 5), async (req, res) =>
       console.error('Firebase upload error:', uploadError);
       return res.status(500).json({
         success: false,
-        message: 'Error uploading photos to Firebase',
+        message: 'Error uploading photos to Firebase Storage',
         error: uploadError.message
       });
     }

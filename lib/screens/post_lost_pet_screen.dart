@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/pet_service.dart';
 import '../services/session_service.dart';
 import '../services/user_service.dart';
+import '../widgets/image_picker_widget.dart';
 import 'dart:io';
 
 class PostLostPetScreen extends StatefulWidget {
@@ -522,29 +523,16 @@ class _PostLostPetScreenState extends State<PostLostPetScreen> {
               style: TextStyle(color: primaryTextColor, fontSize: 14),
             ),
             const SizedBox(height: 16),
-            TextButton(
-              onPressed: () async {
-                final photos = await _picker.pickMultiImage(imageQuality: 85);
-                if (photos.isNotEmpty) {
-                  setState(() {
-                    _pickedPhotos
-                      ..clear()
-                      ..addAll(photos);
-                  });
-                }
+            ImagePickerWidget(
+              onImageSelected: (File image) {
+                setState(() {
+                  _pickedPhotos.add(XFile(image.path));
+                });
               },
-              style: TextButton.styleFrom(
-                backgroundColor: inputBgColor,
-                foregroundColor: primaryTextColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
-              child: const Text(
-                'Upload',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+              title: 'Upload Photos',
+              subtitle: 'Add photos of your pet',
+              allowMultiple: true,
+              maxImages: 5,
             ),
             if (_pickedPhotos.isNotEmpty) ...[
               const SizedBox(height: 12),
@@ -657,19 +645,20 @@ class _PostLostPetScreenState extends State<PostLostPetScreen> {
       // Check if user has a valid backend session
       final userService = UserService();
       final hasValidSession = await userService.hasValidBackendSession();
-      
+
       if (!hasValidSession) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Please login first'), backgroundColor: Colors.red));
         return;
       }
-      
+
       String? ownerId = await SessionService().getBackendUserId();
       print('PostLostPetScreen: Using ownerId: $ownerId');
-      
+
       if (ownerId == null) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Unable to get user ID. Please try logging in again.'), 
+            content:
+                Text('Unable to get user ID. Please try logging in again.'),
             backgroundColor: Colors.red));
         return;
       }

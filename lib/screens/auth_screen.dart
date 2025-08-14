@@ -99,9 +99,6 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
   void _startAnimations() {
     _fadeController.forward();
 
-    // Test backend connection on init
-    _testBackendConnection();
-
     Future.delayed(const Duration(milliseconds: 200), () {
       _slideController.forward();
     });
@@ -109,23 +106,6 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
       _formController.forward();
     });
     _floatingController.repeat(reverse: true);
-  }
-
-  // Test backend connection
-  Future<void> _testBackendConnection() async {
-    try {
-      print('AuthScreen: Testing backend connection...');
-      final results = await AuthService.comprehensiveConnectionTest();
-
-      if (results['success'] == true) {
-        print('AuthScreen: ✅ Backend connection successful');
-      } else {
-        print('AuthScreen: ❌ Backend connection failed');
-        print('AuthScreen: Error: ${results['error']}');
-      }
-    } catch (e) {
-      print('AuthScreen: Connection test error: $e');
-    }
   }
 
   @override

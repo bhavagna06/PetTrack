@@ -141,7 +141,13 @@ class ImagePickerWidget extends StatelessWidget {
                         final File? image =
                             await imageService.pickImageFromCamera();
                         if (image != null) {
-                          onImageSelected(image);
+                          // Show confirmation dialog for camera photo
+                          final bool? shouldUseImage =
+                              await _showCameraConfirmationDialog(
+                                  context, image);
+                          if (shouldUseImage == true) {
+                            onImageSelected(image);
+                          }
                         }
                       },
                     ),
@@ -271,6 +277,97 @@ class ImagePickerWidget extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Future<bool?> _showCameraConfirmationDialog(
+      BuildContext context, File image) async {
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.camera_alt,
+                color: const Color(0xFF9C7649),
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Photo Captured',
+                style: TextStyle(
+                  color: Color(0xFF1C150D),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Plus Jakarta Sans',
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(
+                  image,
+                  width: 200,
+                  height: 200,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Would you like to use this photo?',
+                style: TextStyle(
+                  color: Color(0xFF1C150D),
+                  fontSize: 16,
+                  fontFamily: 'Plus Jakarta Sans',
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(
+                'Retake',
+                style: TextStyle(
+                  color: const Color(0xFF9C7649),
+                  fontSize: 16,
+                  fontFamily: 'Plus Jakarta Sans',
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF9C7649),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(
+                'Use Photo',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontFamily: 'Plus Jakarta Sans',
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
